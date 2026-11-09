@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample
+  namespace: home-iot
+  labels:
+    app: sample
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample
+  template:
+    metadata:
+      labels:
+        app: sample
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull          # 비공개 GHCR 이미지를 받을 출입증 (클러스터에 따로 등록, Git엔 안 올림)
+      containers:
+        - name: sample
+          image: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/sample:latest
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: SERVICE_NAME
+              value: sample
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
