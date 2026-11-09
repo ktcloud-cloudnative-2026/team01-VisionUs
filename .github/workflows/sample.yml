@@ -94,6 +94,15 @@ jobs:
           git switch -c "$BRANCH"
           git commit -am "deploy(dev): ${SERVICE} ${TAG}"
           git push origin "$BRANCH"
-          gh pr create --base main --head "$BRANCH" \
-            --title "deploy(dev): ${SERVICE} ${TAG}" \
-            --body "dev의 ${SERVICE} 이미지를 ${TAG}로 바꿉니다. 머지하면 Argo CD가 dev에 배포합니다. (Actions 자동 생성)"
+          URL="https://github.com/${GITHUB_REPOSITORY}/compare/main...${BRANCH}?expand=1"
+          if gh pr create --base main --head "$BRANCH" \
+               --title "deploy(dev): ${SERVICE} ${TAG}" \
+               --body "dev의 ${SERVICE} 이미지를 ${TAG}로 바꿉니다. 머지하면 Argo CD가 dev에 배포합니다. (Actions 자동 생성)"; then
+            echo "배포 PR을 만들었어요"
+          else
+            # 조직 설정상 Actions가 PR을 못 만들면: 실패 대신 PR 만들 링크를 남긴다
+            echo "PR 자동 생성이 막혀 있어요. 아래 링크로 PR을 만들어 머지하세요:"
+            echo "$URL"
+            echo "### dev 배포 PR 만들기" >> "$GITHUB_STEP_SUMMARY"
+            echo "[${SERVICE} ${TAG} 배포 PR 만들기](${URL})" >> "$GITHUB_STEP_SUMMARY"
+          fi

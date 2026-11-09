@@ -52,4 +52,4 @@ app.get('/metrics', async (req, res) => {
 });
 
 // 이 서비스의 API (복사해서 쓸 때 이 아래를 자기 기능으로 바꾸기)
-app.get('/api/sample', (req, res) => res.json({ message: 'hello from sample v2' }));
+app.get('/api/sample', (req, res) => res.json({ message: 'hello from sample v3' }));
