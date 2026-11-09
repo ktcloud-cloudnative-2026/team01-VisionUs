@@ -66,32 +66,34 @@ jobs:
             ${{ steps.img.outputs.name }}:${{ steps.img.outputs.tag }}
             ${{ steps.img.outputs.name }}:latest
 
-  # main에 머지됐을 때: dev 주문서의 이미지 태그를 새 태그로 바꿔 커밋 → Argo CD가 보고 dev에 배포 (실습 07과 같은 흐름)
+  # main에 머지됐을 때: dev 태그를 바꾸는 PR을 자동으로 만든다 → 사람이 머지 → Argo CD가 dev에 배포
+  # (main은 PR로만 바꿀 수 있어서 직접 push 대신 PR)
   deploy-dev:
     needs: build
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # main에 태그 커밋을 올릴 권한
-    concurrency:
-      group: deploy-dev-tag   # 여러 서비스가 동시에 태그를 바꿀 때 한 번에 하나씩
-      cancel-in-progress: false
+      contents: write        # 배포용 브랜치 올리기
+      pull-requests: write   # PR 만들기
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
 
-      - name: dev 태그 바꾸고 커밋
+      - name: dev 태그 바꾸고 PR 만들기
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           export IMG="ghcr.io/${GITHUB_REPOSITORY,,}/${SERVICE}"
           export TAG="sha-${GITHUB_SHA::7}"
+          BRANCH="deploy/dev-${SERVICE}-${TAG}"
           yq -i '(.images[] | select(.name == strenv(IMG)) | .newTag) = strenv(TAG)' deploy/overlays/dev/kustomization.yaml
-          git diff
+          git diff --quiet && { echo "바뀐 것 없음"; exit 0; }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "deploy(dev): ${SERVICE} ${TAG} [skip ci]" || { echo "바뀐 것 없음"; exit 0; }
-          for i in 1 2 3; do
-            git pull --rebase origin main && git push origin HEAD:main && exit 0
-            sleep 5
-          done
-          exit 1
+          git switch -c "$BRANCH"
+          git commit -am "deploy(dev): ${SERVICE} ${TAG}"
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "deploy(dev): ${SERVICE} ${TAG}" \
+            --body "dev의 ${SERVICE} 이미지를 ${TAG}로 바꿉니다. 머지하면 Argo CD가 dev에 배포합니다. (Actions 자동 생성)"
