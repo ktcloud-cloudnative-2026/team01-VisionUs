@@ -8,12 +8,12 @@
 
 예: 각자 서비스 하나를 코드부터 배포 · 모니터링까지 맡고, 공통 영역 하나를 더 맡습니다.
 
-| 이름 | GitHub | 맡은 서비스 | 공통 영역 |
+| 이름 | GitHub | 맡은 서비스 | 공통 영역(미정) |
 |---|---|---|---|
-|김창덕| @Deoktus | | CI/CD |
-|이수영| @sooyeong-lee| | 클러스터 · GitOps |
-|신민혁| @smh4261| | 관측 |
-|최명진| @insider1004| | 보안 · 게이트웨이 |
-|김영준 | @gray-apple12| | (5명 팀) 테스트 · 품질 |
+|김창덕| @Deoktus |Device Service| CI/CD(예시) |
+|이수영| @sooyeong-lee|Dashboard, Simulator| 클러스터 · GitOps(예시)|
+|신민혁| @smh4261|control Service| 관측(예시) |
+|최명진| @insider1004|Telemetry Service| 보안 · 게이트웨이(예시) |
+|김영준 | @gray-apple12|Auth Service| (5명 팀) 테스트 · 품질(예시) |
 
 - 서비스 폴더의 리뷰어는 [CODEOWNERS](../.github/CODEOWNERS)에 같은 내용으로 적습니다
