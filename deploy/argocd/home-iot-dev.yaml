@@ -1,0 +1,21 @@
+# Argo CD 주문서: "이 저장소 main의 deploy/overlays/dev를 dev 클러스터에 맞춰 둬라" (실습 06 4단계와 같은 구조)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: home-iot-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ktcloud-cloudnative-2026/team01-VisionUs.git
+    targetRevision: main
+    path: deploy/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: home-iot
+  syncPolicy:
+    automated:          # Git이 바뀌면 자동 배포
+      prune: true       # Git에서 지운 것은 클러스터에서도 지움
+      selfHeal: true    # 손으로 바꾸면 Git 상태로 되돌림
+    syncOptions:
+      - CreateNamespace=true

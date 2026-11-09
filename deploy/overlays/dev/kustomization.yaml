@@ -1,0 +1,9 @@
+# dev 클러스터에 올릴 것 목록 + dev에서 쓸 이미지 버전
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base/platform
+  - ../../base/sample
+images:
+  - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/sample
+    newTag: sha-2bb5b5a

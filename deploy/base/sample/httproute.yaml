@@ -1,0 +1,17 @@
+# 입구로 /api/sample 이 오면 sample 서비스로
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: sample
+  namespace: home-iot
+spec:
+  parentRefs:
+    - name: home-iot
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/sample
+      backendRefs:
+        - name: sample
+          port: 80

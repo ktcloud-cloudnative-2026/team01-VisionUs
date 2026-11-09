@@ -1,0 +1,12 @@
+# 외부 입구 하나 (MetalLB가 외부 IP를 붙여 줌)
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: home-iot
+  namespace: home-iot
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
