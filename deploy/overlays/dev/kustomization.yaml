@@ -7,9 +7,9 @@ resources:
 - ../../base/control
 - ../../base/auth
 images:
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/auth
+  newTag: sha-db7d4b6
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/control
   newTag: sha-2d613f4
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/sample
   newTag: sha-ddee513
-- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/auth
-  newTag: latest
