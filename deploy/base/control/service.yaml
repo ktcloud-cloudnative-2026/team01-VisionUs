@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: control
+  namespace: home-iot
+  labels:
+    app: control
+spec:
+  selector:
+    app: control
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
