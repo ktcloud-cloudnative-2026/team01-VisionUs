@@ -1,6 +1,9 @@
 import express from 'express';
 import client from 'prom-client';
 import { randomUUID } from 'node:crypto';
+import { sendError } from './errors.js';
+import { getDeviceType } from './devices.js';
+import { validateCommand } from './validate.js';
 
 export const SERVICE = process.env.SERVICE_NAME || 'control';
 
@@ -53,3 +56,27 @@ app.get('/metrics', async (req, res) => {
 
 // 이 서비스의 API (복사해서 쓸 때 이 아래를 자기 기능으로 바꾸기)
 app.get('/api/control', (req, res) => res.json({ message: 'hello from control v3' }));
+
+// 기기 제어 명령 받기 (api-spec 4.5)
+// 지금은 검사까지만. MQTT로 보내고 결과를 기다리는 건 다음 일감
+app.post('/api/v1/devices/:deviceId/commands', express.json(), async (req, res) => {
+  const { deviceId } = req.params;
+
+  const deviceType = await getDeviceType(deviceId);
+  if (!deviceType) return sendError(res, 'DEVICE_NOT_FOUND');
+
+  const result = validateCommand(deviceType, req.body);
+  if (!result.ok) return sendError(res, result.code, result.message);
+
+  // 임시 응답: 검사를 통과해 접수만 됨 (MQTT 붙이면 200 + completed로 바뀜)
+  res.status(202).json({
+    success: true,
+    data: { commandId: `cmd-${randomUUID()}`, deviceId, status: 'accepted' },
+  });
+});
+
+// JSON 모양이 깨진 요청 → 400 (express가 HTML로 답하지 않게)
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') return sendError(res, 'INVALID_REQUEST', 'JSON 형식이 올바르지 않습니다.');
+  next(err);
+});
