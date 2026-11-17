@@ -1,4 +1,4 @@
-name: 일감
+name: 일감 (Task)
 description: 기능 개발 · 인프라 구성 · 문서 등 하루 안에 끝낼 작업
 title: "[Task] "
 labels: ["task"]
