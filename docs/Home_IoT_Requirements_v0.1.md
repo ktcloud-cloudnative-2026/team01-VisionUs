@@ -13,7 +13,7 @@
   - 이미 가입된 이메일이면 409
   - 이메일 형식이 올바르지 않거나 비밀번호가 규칙에 맞지 않으면 400
   - 가입 성공 시 201을 반환하고 비밀번호는 해시되어 저장된다
-- 담당 서비스: auth-service · API: [POST /api/auth/signup](api/)
+- 담당 서비스: auth-service · API: [POST /api/v1/auth/signup](api/)
 
 ### US-02 로그인
 
@@ -22,7 +22,7 @@
   - 이메일 또는 비밀번호가 틀리면 401
   - 성공 시 200과 함께 JWT가 발급된다
   - 토큰 없이 또는 만료된 토큰으로 보호된 API를 호출하면 401
-- 담당 서비스: auth-service · API: [POST /api/auth/login](api/)
+- 담당 서비스: auth-service · API: [POST /api/v1/auth/login](api/)
 
 ## 기기 관리
 
@@ -33,7 +33,7 @@
   - 이미 등록된 기기 ID이면 409
   - 지원하지 않는 기기 종류이면 400
   - 등록하면 내 기기 목록에 보인다
-- 담당 서비스: device-service · API: [POST /api/devices](api/)
+- 담당 서비스: device-service · API: [POST /api/v1/devices](api/)
 
 ### US-04 기기 목록 조회
 
@@ -42,7 +42,7 @@
   - 본인이 등록한 기기만 조회된다 (다른 사용자의 기기는 보이지 않음)
   - 기기 종류별 필터링이 가능하다
   - 등록된 기기가 없으면 빈 배열과 200을 반환한다
-- 담당 서비스: device-service · API: [GET /api/devices](api/)
+- 담당 서비스: device-service · API: [GET /api/v1/devices](api/)
 
 ### US-05 기기 상세 조회
 
@@ -50,7 +50,7 @@
 - 수용 기준
   - 존재하지 않는 기기이면 404
   - 다른 사용자의 기기이면 403
-- 담당 서비스: device-service · API: [GET /api/devices/{id}](api/)
+- 담당 서비스: device-service · API: [GET /api/v1/devices/{deviceId}](api/)
 
 ### US-06 기기 삭제
 
@@ -59,7 +59,7 @@
   - 존재하지 않는 기기이면 404
   - 다른 사용자의 기기이면 403
   - 삭제하면 내 기기 목록에서 사라지고 해당 기기의 MQTT 구독이 해제된다
-- 담당 서비스: device-service · API: [DELETE /api/devices/{id}](api/)
+- 담당 서비스: device-service · API: [DELETE /api/v1/devices/{deviceId}](api/)
 
 ## 기기 제어
 
@@ -70,7 +70,7 @@
   - 밝기 값이 0~100을 벗어나면 400
   - 오프라인 상태의 조명이면 409
   - 명령이 MQTT로 발행되면 202를 반환하고, 조명이 상태를 보고하면 대시보드에 반영된다
-- 담당 서비스: control-service · API: [POST /api/lights/{id}/commands](api/)
+- 담당 서비스: control-service · API: [POST /api/v1/devices/{deviceId}/commands](api/)
 
 ### US-08 에어컨 제어
 
@@ -79,7 +79,7 @@
   - 목표 온도가 허용 범위(예: 18~30℃)를 벗어나면 400
   - 에어컨이 아닌 기기에 요청하면 400
   - 설정하면 대시보드에 변경된 목표 온도와 운전 모드가 표시된다
-- 담당 서비스: control-service · API: [PUT /api/air-conditioners/{id}/settings](api/)
+- 담당 서비스: control-service · API: [POST /api/v1/devices/{deviceId}/commands](api/)
 
 ### US-09 난방기기 온도 설정
 
@@ -88,7 +88,7 @@
   - 허용 범위(예: 5~35℃)를 벗어나면 400
   - 난방기기가 아닌 기기에 요청하면 400
   - 설정하면 대시보드에 목표 온도가 표시된다
-- 담당 서비스: control-service · API: [PUT /api/heaters/{id}/target-temperature](api/)
+- 담당 서비스: control-service · API: [POST /api/v1/devices/{deviceId}/commands](api/)
 
 ### US-10 공기청정기 제어
 
@@ -97,7 +97,7 @@
   - 허용되지 않은 풍량 값이면 400
   - 오프라인 상태의 기기이면 409
   - 명령이 MQTT로 발행되면 202를 반환하고, 기기가 상태를 보고하면 대시보드에 반영된다
-- 담당 서비스: control-service · API: [POST /api/air-purifiers/{id}/commands](api/)
+- 담당 서비스: control-service · API: [POST /api/v1/devices/{deviceId}/commands](api/)
 
 ### US-11 커튼 열기/닫기
 
@@ -106,7 +106,7 @@
   - 개폐 정도가 0~100을 벗어나면 400
   - 이동 중인 커튼에 새 명령을 보내면 최신 명령으로 대체된다
   - 동작이 끝나면 커튼의 현재 개폐 정도가 대시보드에 보인다
-- 담당 서비스: control-service · API: [POST /api/curtains/{id}/commands](api/)
+- 담당 서비스: control-service · API: [POST /api/v1/devices/{deviceId}/commands](api/)
 
 ### US-12 엘리베이터 호출
 
@@ -115,7 +115,7 @@
   - 이미 호출된 상태에서 다시 호출하면 409
   - 호출하면 엘리베이터 상태(대기/이동 중/도착)가 대시보드에 표시된다
   - 층 정보가 올바르지 않으면 400
-- 담당 서비스: control-service · API: [POST /api/elevators/{id}/calls](api/)
+- 담당 서비스: control-service · API: [POST /api/v1/elevator/calls](api/)
 
 ## 상태 모니터링
 
@@ -126,7 +126,7 @@
   - 기기가 MQTT로 보고한 상태가 PostgreSQL에 저장되고 대시보드에 반영된다
   - 일정 시간 동안 상태 보고가 없으면 기기는 오프라인으로 표시된다
   - 인증되지 않은 연결은 401
-- 담당 서비스: monitoring-service · API: [GET /api/devices/stream](api/)
+- 담당 서비스: monitoring-service · API: [GET /api/v1/devices/stream](api/)
 
 ### US-14 기기 이력 조회
 
@@ -135,7 +135,7 @@
   - 시작/종료 시각을 지정하면 해당 기간의 이력만 반환된다
   - 최신순으로 정렬되며 페이지네이션을 지원한다
   - 다른 사용자의 기기이면 403
-- 담당 서비스: monitoring-service · API: [GET /api/devices/{id}/history](api/)
+- 담당 서비스: monitoring-service · API: [GET /api/v1/devices/{deviceId}/events](api/)
 
 ## 시뮬레이터
 
@@ -146,7 +146,7 @@
   - 기기 종류를 지정해 시뮬레이터를 생성하면 MQTT로 상태를 주기적으로 발행한다
   - 지원하지 않는 기기 종류이면 400
   - 시뮬레이터를 중지하면 기기가 오프라인으로 전환된다
-- 담당 서비스: simulator-service · API: [POST /api/simulators](api/)
+- 담당 서비스: simulator-service · API: [POST /api/v1/simulators](api/)
 
 ## 비기능 요구사항
 
