@@ -1,4 +1,4 @@
-# 입구로 /api/sample 이 오면 sample 서비스로
+# 입구로 /api/v1/sample 이 오면 sample 서비스로
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -11,7 +11,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: /api/sample
+            value: /api/v1/sample
       backendRefs:
         - name: sample
           port: 80
