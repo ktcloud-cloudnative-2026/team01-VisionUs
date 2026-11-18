@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { sendError } from './errors.js';
 import { getDeviceType } from './devices.js';
 import { validateCommand } from './validate.js';
+import { validateElevatorCall } from './elevator.js';
 
 export const SERVICE = process.env.SERVICE_NAME || 'control';
 
@@ -72,6 +73,22 @@ app.post('/api/v1/devices/:deviceId/commands', express.json(), async (req, res) 
   res.status(202).json({
     success: true,
     data: { commandId: `cmd-${randomUUID()}`, deviceId, status: 'accepted' },
+  });
+});
+
+// 엘리베이터 호출 (api-spec 4.6)
+// 지금은 검사까지만. MQTT로 실제 호출하는 건 다음 일감
+app.post('/api/v1/elevator/calls', express.json(), (req, res) => {
+  const result = validateElevatorCall(req.body);
+  if (!result.ok) return sendError(res, result.code, result.message);
+
+  res.status(202).json({
+    success: true,
+    data: {
+      callId: `call-${randomUUID()}`,
+      status: 'requested',
+      requestedAt: new Date().toISOString(),
+    },
   });
 });
 
