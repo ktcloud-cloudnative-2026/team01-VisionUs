@@ -1,0 +1,25 @@
+# prod 클러스터에 올릴 것 목록 + prod 이미지 버전
+# 태그는 dev에서 확인된 것만 옮겨 적는다 (새로 빌드하지 않음). 이 파일을 바꾸는 PR을 승인(머지)하면 prod에 배포
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../base/platform
+- ../../base/infra
+- ../../base/control
+images:
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/control
+  newTag: sha-c221ec6
+# prod 환경 설정값 (dev와 DB_SCHEMA만 다름)
+configMapGenerator:
+- name: home-iot-config
+  namespace: home-iot
+  literals:
+  - NODE_ENV=production
+  - LOG_LEVEL=info
+  - DB_HOST=postgres
+  - DB_PORT=5432
+  - DB_NAME=homeiot
+  - DB_SCHEMA=prod
+  - MQTT_URL=mqtt://mosquitto:1883
+  - DEVICE_SERVICE_URL=http://device
+  - COMMAND_TIMEOUT_MS=5000

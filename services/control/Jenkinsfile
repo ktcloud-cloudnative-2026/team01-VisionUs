@@ -43,12 +43,12 @@ pipeline {
     }
     stage('빌드') {
       when { anyOf { changeset 'services/control/**'; triggeredBy 'UserIdCause' } }
-      steps { sh 'docker build -t "$IMAGE:$TAG" -t "$IMAGE:latest" services/control' }
+      steps { sh 'docker build --pull -t "$IMAGE:$TAG" -t "$IMAGE:latest" services/control' }
     }
     stage('스캔') {
       when { anyOf { changeset 'services/control/**'; triggeredBy 'UserIdCause' } }
       steps {
-        sh 'trivy image --cache-dir "$JENKINS_HOME/.trivy" --exit-code 1 --severity CRITICAL --ignore-unfixed "$IMAGE:$TAG"'
+        sh 'trivy image --cache-dir "$JENKINS_HOME/.trivy-$JOB_NAME" --exit-code 1 --severity CRITICAL --ignore-unfixed "$IMAGE:$TAG"'
       }
     }
     stage('올리기') {

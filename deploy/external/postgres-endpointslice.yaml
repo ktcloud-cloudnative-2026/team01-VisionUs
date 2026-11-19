@@ -1,0 +1,17 @@
+# postgres 이름표가 가리킬 실제 DB 주소 (t1-db)
+# Argo CD는 EndpointSlice를 기본으로 무시하므로 dev, prod 클러스터에 각각 손으로 한 번 적용:
+#   kubectl apply -f deploy/external/postgres-endpointslice.yaml
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: postgres-external
+  namespace: home-iot
+  labels:
+    kubernetes.io/service-name: postgres
+addressType: IPv4
+ports:
+  - name: postgres
+    port: 5432
+    protocol: TCP
+endpoints:
+  - addresses: ["10.10.21.10"]
