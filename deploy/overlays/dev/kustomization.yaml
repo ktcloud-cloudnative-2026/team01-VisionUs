@@ -6,6 +6,7 @@ resources:
 - ../../base/sample
 - ../../base/control
 - ../../base/auth
+- ../../base/infra
 images:
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/auth
   newTag: sha-db7d4b6
@@ -13,3 +14,17 @@ images:
   newTag: sha-c221ec6
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/sample
   newTag: sha-c221ec6
+# dev 환경 설정값 (비밀번호는 Secret home-iot-secrets 에. Git엔 안 올림)
+configMapGenerator:
+- name: home-iot-config
+  namespace: home-iot
+  literals:
+  - NODE_ENV=production
+  - LOG_LEVEL=info
+  - DB_HOST=postgres
+  - DB_PORT=5432
+  - DB_NAME=homeiot
+  - DB_SCHEMA=dev
+  - MQTT_URL=mqtt://mosquitto:1883
+  - DEVICE_SERVICE_URL=http://device
+  - COMMAND_TIMEOUT_MS=5000
