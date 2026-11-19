@@ -2,6 +2,7 @@
 FROM node:24-alpine3.24 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY common ./common
 RUN npm ci --omit=dev
 COPY src ./src
 
@@ -13,6 +14,7 @@ RUN apk add --no-cache libstdc++ \
 COPY --from=build /usr/local/bin/node /usr/local/bin/node
 WORKDIR /app
 COPY --from=build /app ./
+ENV NODE_ENV=production PORT=3000
 USER node
 EXPOSE 3000
-CMD ["node", "src/server.js"]
+CMD ["node", "src/index.js"]
