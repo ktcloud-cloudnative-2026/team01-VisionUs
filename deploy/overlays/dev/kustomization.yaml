@@ -12,4 +12,4 @@ images:
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/control
   newTag: sha-54a8a43
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/sample
-  newTag: sha-4ada646
+  newTag: sha-c221ec6
