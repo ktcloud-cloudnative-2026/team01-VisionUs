@@ -1,4 +1,5 @@
-# 입구로 /api/control 이 오면 control 서비스로
+# control이 맡는 주소: 기기 제어 명령, 엘리베이터 호출
+# /api/v1/devices 아래는 device와 나눠 쓴다 → 명령(/commands)만 정확히 골라 control로
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -10,8 +11,11 @@ spec:
   rules:
     - matches:
         - path:
+            type: RegularExpression
+            value: "^/api/v1/devices/[^/]+/commands$"
+        - path:
             type: PathPrefix
-            value: /api/control
+            value: /api/v1/elevator
       backendRefs:
         - name: control
           port: 80
