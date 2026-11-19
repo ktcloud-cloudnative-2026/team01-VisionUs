@@ -1,6 +1,14 @@
 // sample 서비스 파이프라인 (실습 5 기준, 우리 저장소에 맞게 수정)
 // Jenkins 작업 이름: sample / Script Path: services/sample/Jenkinsfile
 // 다른 서비스는 이 파일을 복사해 sample → 내 서비스 이름으로 바꾼다
+// 디스코드 알림 보내기 (웹훅 주소는 Jenkins 비밀값 discord-webhook 에만 있음)
+def notifyDiscord(String msg) {
+  withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_HOOK')]) {
+    writeFile file: 'discord.json', text: groovy.json.JsonOutput.toJson([content: msg]), encoding: 'UTF-8'
+    sh 'curl -fsS -H "Content-Type: application/json" -d @discord.json "$DISCORD_HOOK" || echo "디스코드 알림 실패 (빌드 결과에는 영향 없음)"'
+  }
+}
+
 pipeline {
   agent any
   options { disableConcurrentBuilds() }
@@ -67,7 +75,8 @@ pipeline {
 EOF
           if curl -fsS -X POST -H "Authorization: Bearer $GH_PSW" -H "Accept: application/vnd.github+json" \
                "https://api.github.com/repos/$ORG_REPO/pulls" -d @pr.json -o pr-res.json; then
-            grep -o '"html_url": *"[^"]*/pull/[0-9]*"' pr-res.json | head -1
+            grep -o '"html_url": *"[^"]*/pull/[0-9]*"' pr-res.json | head -1 | sed -E 's/.*"(https[^"]+)"/\\1/' > pr-url.txt
+            cat pr-url.txt
           else
             echo "PR 자동 생성 실패. 이 링크로 PR을 만드세요: https://github.com/$ORG_REPO/compare/main...$BRANCH?expand=1"
           fi
@@ -76,6 +85,20 @@ EOF
     }
   }
   post {
-    always { sh 'docker logout ghcr.io || true; rm -f pr.json pr-res.json' }
+    always { sh 'docker logout ghcr.io || true' }
+    success {
+      script {
+        if (env.TAG) {   // sample이 바뀌어서 실제로 빌드한 경우에만
+          def pr = fileExists('pr-url.txt') ? readFile('pr-url.txt').trim() : '(PR 링크 없음)'
+          notifyDiscord("✅ **sample** 빌드 성공 → dev 배포 PR 생성\n태그: `${env.TAG}`\nPR: ${pr}\n머지하면 Argo CD가 dev에 배포합니다.")
+        }
+      }
+    }
+    failure {
+      script {
+        notifyDiscord("❌ **sample** 빌드 실패 (#${env.BUILD_NUMBER})\n태그: `${env.TAG ?: '-'}`\nJenkins에서 sample 작업의 Console Output을 확인해 주세요.")
+      }
+    }
+    cleanup { sh 'rm -f pr.json pr-res.json pr-url.txt discord.json' }
   }
 }
