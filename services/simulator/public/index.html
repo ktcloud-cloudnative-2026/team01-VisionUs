@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>가전 기기 시뮬레이터 · Home IoT</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --line:#e3e6ea; --text:#1d2330; --muted:#6b7380; --ok:#1f9d55; --bad:#d64545; --accent:#2f6fed; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; background:var(--card); border-bottom:1px solid var(--line); }
+  h1 { font-size:18px; margin:0; }
+  .badge { font-size:13px; padding:4px 10px; border-radius:999px; background:#fde8e8; color:var(--bad); }
+  .badge.on { background:#e3f6ea; color:var(--ok); }
+  main { padding:20px 24px; max-width:1200px; margin:0 auto; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .card.off { opacity:.55; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .title { font-weight:600; }
+  .muted { color:var(--muted); font-size:13px; }
+  .state { margin:10px 0; font-size:15px; }
+  button { font:inherit; font-size:13px; border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 10px; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .editor { margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:none; }
+  .editor.open { display:block; }
+  .editor label { display:flex; justify-content:space-between; align-items:center; margin:4px 0; font-size:13px; }
+  .editor input, .editor select { width:120px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; }
+  .empty { padding:40px; text-align:center; color:var(--muted); background:var(--card); border:1px dashed var(--line); border-radius:12px; }
+  h2 { font-size:15px; margin:24px 0 8px; }
+  #log { background:#111827; color:#d1d5db; border-radius:12px; padding:12px; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; height:260px; overflow:auto; }
+  #log .in { color:#93c5fd; } #log .out { color:#86efac; }
+</style>
+</head>
+<body>
+<header>
+  <h1>가전 기기 시뮬레이터</h1>
+  <span id="mqtt" class="badge">MQTT 연결 안 됨</span>
+</header>
+<main>
+  <p class="muted">사용자 화면에서 기기를 등록하면 여기에 가상 기기가 생깁니다. 명령을 받으면 상태를 바꿔 발행하고, 상태 변경으로 기기를 손으로 조작한 경우를 재현할 수 있습니다.</p>
+  <div id="devices" class="grid"></div>
+  <h2>이벤트 로그</h2>
+  <div id="log"></div>
+</main>
+<script>
+const API = '/simulator/api';
+const devices = new Map();
+
+function fmtState(d) {
+  const s = d.state || {};
+  const p = d.power === 'on' ? '켜짐' : d.power === 'off' ? '꺼짐' : null;
+  switch (d.type) {
+    case 'light': return `${p} · 밝기 ${s.brightness}%`;
+    case 'aircon': return `${p} · ${s.temperature}℃ · ${({cool:'냉방',dry:'제습',fan:'송풍'})[s.mode] || s.mode}`;
+    case 'heater': return `${p} · ${s.temperature}℃`;
+    case 'purifier': return `${p} · 풍량 ${({low:'약',mid:'중',high:'강',auto:'자동'})[s.fanSpeed] || s.fanSpeed}`;
+    case 'curtain': return s.position === 0 ? '닫힘' : `열림 ${s.position}%`;
+    case 'elevator': {
+      const st = ({idle:'호출 대기', arriving:`${s.targetFloor}층으로 이동 중`, arrived:'도착'})[s.callStatus] || s.callStatus;
+      return `${s.currentFloor}층 · ${st}`;
+    }
+    default: return JSON.stringify(s);
+  }
+}
+const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const time = (iso) => iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour12:false }) : '-';
+
+function editorFields(d) {
+  let html = '';
+  if (d.power !== null) html += `<label>전원 <select name="power"><option value="on" ${d.power==='on'?'selected':''}>켜짐</option><option value="off" ${d.power==='off'?'selected':''}>꺼짐</option></select></label>`;
+  for (const [k, v] of Object.entries(d.state || {})) {
+    if (d.type === 'elevator' && k !== 'currentFloor') continue;
+    html += `<label>${esc(k)} <input name="s.${esc(k)}" value="${esc(v)}" data-num="${typeof v === 'number'}"></label>`;
+  }
+  return html + `<div class="actions"><button class="primary" data-act="apply">적용 (state 발행)</button></div>`;
+}
+
+function render() {
+  const el = document.getElementById('devices');
+  if (!devices.size) { el.innerHTML = '<div class="empty">등록된 기기가 없습니다. 사용자 화면의 “기기 등록”에서 기기를 추가하세요.</div>'; return; }
+  const open = new Set([...document.querySelectorAll('.editor.open')].map((e) => e.dataset.key));
+  el.innerHTML = [...devices.values()].sort((a, b) => a.key.localeCompare(b.key)).map((d) => `
+    <div class="card ${d.connected ? '' : 'off'}" data-key="${esc(d.key)}">
+      <div class="row"><span class="title">${esc(d.typeLabel)} · ${esc(d.name)}</span><span class="muted">home ${esc(d.homeId)}</span></div>
+      <div class="muted">${esc(d.deviceId)}${d.location ? ' · ' + esc(d.location) : ''}</div>
+      <div class="state">현재 상태: <b>${esc(fmtState(d))}</b></div>
+      <div class="muted">마지막 명령: ${time(d.lastCommandAt)}</div>
+      <div class="actions">
+        <button data-act="edit">상태 변경</button>
+        ${d.type === 'elevator' ? `<button data-act="arrive" ${d.call ? '' : 'disabled'}>도착 처리</button>` : ''}
+        <button data-act="conn">${d.connected ? '연결 끊기' : '다시 연결'}</button>
+      </div>
+      <div class="editor ${open.has(d.key) ? 'open' : ''}" data-key="${esc(d.key)}">${editorFields(d)}</div>
+    </div>`).join('');
+}
+
+function addLog(e) {
+  const box = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = e.direction;
+  div.textContent = `[${time(e.at)}] ${e.direction === 'in' ? '수신' : '발행'} ${e.topic} ${JSON.stringify(e.payload)}`;
+  box.prepend(div);
+  while (box.childNodes.length > 200) box.lastChild.remove();
+}
+
+async function post(path, body) {
+  const res = await fetch(API + path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {}) });
+  const json = await res.json();
+  if (!json.success) alert(json.error?.message || '실패');
+}
+
+document.getElementById('devices').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button'); if (!btn) return;
+  const card = btn.closest('.card'); const d = devices.get(card.dataset.key);
+  const path = `/devices/${encodeURIComponent(d.homeId)}/${encodeURIComponent(d.deviceId)}`;
+  if (btn.dataset.act === 'edit') card.querySelector('.editor').classList.toggle('open');
+  if (btn.dataset.act === 'arrive') await post(path + '/arrive');
+  if (btn.dataset.act === 'conn') await post(path + '/connection', { connected: !d.connected });
+  if (btn.dataset.act === 'apply') {
+    const body = { state: {} };
+    card.querySelectorAll('.editor select, .editor input').forEach((i) => {
+      if (i.name === 'power') body.power = i.value;
+      else if (i.name.startsWith('s.')) body.state[i.name.slice(2)] = i.dataset.num === 'true' ? Number(i.value) : i.value;
+    });
+    await post(path + '/state', body);
+    card.querySelector('.editor').classList.remove('open');
+  }
+});
+
+function setMqtt(connected) {
+  const b = document.getElementById('mqtt');
+  b.textContent = connected ? 'MQTT 연결됨' : 'MQTT 연결 안 됨';
+  b.classList.toggle('on', connected);
+}
+
+async function init() {
+  const json = await (await fetch(API + '/devices')).json();
+  setMqtt(json.data.mqttConnected);
+  json.data.devices.forEach((d) => devices.set(d.key, d));
+  json.data.log.slice().reverse().forEach(addLog);
+  render();
+  const es = new EventSource(API + '/stream');
+  es.addEventListener('mqtt', (e) => setMqtt(JSON.parse(e.data).connected));
+  es.addEventListener('device', (e) => {
+    const d = JSON.parse(e.data); devices.set(d.key, d);
+    // 편집 중인 카드는 입력값을 지우지 않도록 상태 글자만 갱신
+    const card = [...document.querySelectorAll('.card')].find((c) => c.dataset.key === d.key);
+    if (card && document.querySelector('.editor.open')) card.querySelector('.state b').textContent = fmtState(d);
+    else render();
+  });
+  es.addEventListener('removed', (e) => { devices.delete(JSON.parse(e.data).key); render(); });
+  es.addEventListener('log', (e) => addLog(JSON.parse(e.data)));
+}
+init();
+</script>
+</body>
+</html>
