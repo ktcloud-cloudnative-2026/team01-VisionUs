@@ -6,6 +6,7 @@ resources:
 - ../../base/sample
 - ../../base/control
 - ../../base/auth
+- ../../base/device
 - ../../base/infra
 images:
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/auth
@@ -14,6 +15,8 @@ images:
   newTag: sha-ae4a119
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/sample
   newTag: sha-ae4a119
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/device
+  newTag: latest
 # dev 환경 설정값 (비밀번호는 Secret home-iot-secrets 에. Git엔 안 올림)
 configMapGenerator:
 - literals:
