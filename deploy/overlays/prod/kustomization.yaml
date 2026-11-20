@@ -8,7 +8,7 @@ resources:
 - ../../base/control
 images:
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/control
-  newTag: sha-c221ec6
+  newTag: sha-c3b55f7
 # prod 환경 설정값 (dev와 DB_SCHEMA만 다름)
 configMapGenerator:
 - name: home-iot-config
