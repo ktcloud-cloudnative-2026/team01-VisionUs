@@ -52,10 +52,15 @@ pipeline {
       }
     }
     stage('올리기') {
+      // 로그인 정보를 이 빌드 폴더에만 둔다. 공용 위치(~/.docker)에 두면 다른 서비스 빌드가 끝나며
+      // logout 할 때 같이 지워져서, 동시에 올리던 빌드가 unauthorized 로 실패한다
       when { anyOf { changeset 'services/sample/**'; triggeredBy 'UserIdCause' } }
       steps {
-        sh 'echo "$GH_PSW" | docker login ghcr.io -u "$GH_USR" --password-stdin'
-        sh 'docker push "$IMAGE:$TAG" && docker push "$IMAGE:latest"'
+        sh '''
+          export DOCKER_CONFIG="$WORKSPACE/.docker-login"
+          echo "$GH_PSW" | docker login ghcr.io -u "$GH_USR" --password-stdin
+          docker push "$IMAGE:$TAG" && docker push "$IMAGE:latest"
+        '''
       }
     }
     stage('배포 PR') {
@@ -99,7 +104,7 @@ EOF
     }
   }
   post {
-    always { sh 'docker logout ghcr.io || true' }
+    always { sh 'rm -rf "$WORKSPACE/.docker-login"' }   // 이 빌드의 로그인 정보만 지움
     success {
       script {
         if (env.TAG) {   // sample이 바뀌어서 실제로 빌드한 경우에만
