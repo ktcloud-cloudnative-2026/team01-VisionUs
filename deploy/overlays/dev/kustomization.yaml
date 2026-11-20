@@ -11,7 +11,7 @@ images:
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/auth
   newTag: sha-db7d4b6
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/control
-  newTag: sha-ac0a867
+  newTag: sha-ae4a119
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/sample
   newTag: sha-c221ec6
 # dev 환경 설정값 (비밀번호는 Secret home-iot-secrets 에. Git엔 안 올림)
