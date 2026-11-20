@@ -1,4 +1,4 @@
-# 입구로 /api/auth 이 오면 auth 서비스로
+# 입구로 이 주소가 오면 auth 서비스로 (6번에서 주소를 내 것으로 바꾸기)
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -10,8 +10,23 @@ spec:
   rules:
     - matches:
         - path:
+            type: Exact
+            value: /api/v1/auth/signup
+        - path:
+            type: Exact
+            value: /api/v1/auth/login
+        - path:
+            type: Exact
+            value: /api/v1/auth/refresh
+        - path:
+            type: Exact
+            value: /api/v1/auth/.well-known/jwks.json
+        - path:
+            type: Exact
+            value: /api/v1/auth/logout
+        - path:
             type: PathPrefix
-            value: /api/auth
+            value: /api/v1/users
       backendRefs:
         - name: auth
           port: 80
