@@ -1,0 +1,13 @@
+{
+  "name": "telemetry",
+  "version": "0.2.0",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@homeiot/common": "file:./common"
+  }
+}

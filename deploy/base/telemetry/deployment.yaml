@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telemetry
+  namespace: home-iot
+  labels:
+    app: telemetry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: telemetry
+  template:
+    metadata:
+      labels:
+        app: telemetry
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull          # 비공개 GHCR 이미지를 받을 출입증 (클러스터에 따로 등록, Git엔 안 올림)
+      containers:
+        - name: telemetry
+          image: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/telemetry:latest
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: home-iot-config    # DB 주소, 스키마(dev/prod), MQTT 주소 등 (환경마다 overlay에서 만듦)
+            - secretRef:
+                name: home-iot-secrets   # DB, MQTT 비밀번호 (클러스터에 따로 등록, Git엔 안 올림)
+          readinessProbe:                # DB, MQTT까지 붙어야 "준비 완료"
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:                 # 살아 있는지만
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
