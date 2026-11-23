@@ -1,0 +1,17 @@
+# 입구로 이 주소가 오면 simulator 서비스로 (6번에서 주소를 내 것으로 바꾸기)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: simulator
+  namespace: home-iot
+spec:
+  parentRefs:
+    - name: home-iot
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /simulator
+      backendRefs:
+        - name: simulator
+          port: 80

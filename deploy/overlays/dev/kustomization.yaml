@@ -8,8 +8,11 @@ resources:
 - ../../base/auth
 - ../../base/device
 - ../../base/telemetry
+- ../../base/simulator
 - ../../base/infra
 images:
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/simulator
+  newTag: latest
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/auth
   newTag: sha-2c300d1
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/control
@@ -33,5 +36,7 @@ configMapGenerator:
   - DEVICE_SERVICE_URL=http://device
   - COMMAND_TIMEOUT_MS=5000
   - OFFLINE_AFTER_SEC=20
+  - SIM_INTERVAL_SEC="5"
+  - SIM_FLOOR_MOVE_MS="1500"
   name: home-iot-config
   namespace: home-iot
