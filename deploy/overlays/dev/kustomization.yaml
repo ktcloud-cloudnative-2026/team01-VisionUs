@@ -11,8 +11,6 @@ resources:
 - ../../base/simulator
 - ../../base/infra
 images:
-- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/simulator
-  newTag: latest
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/auth
   newTag: sha-2c300d1
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/control
@@ -21,6 +19,8 @@ images:
   newTag: sha-8969fb0
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/sample
   newTag: sha-ae4a119
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/simulator
+  newTag: sha-3e8cb97
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/telemetry
   newTag: sha-907bedb
 # dev 환경 설정값 (비밀번호는 Secret home-iot-secrets 에. Git엔 안 올림)
