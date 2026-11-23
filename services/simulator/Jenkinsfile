@@ -1,0 +1,127 @@
+// simulator 서비스 파이프라인 (실습 5 기준, 우리 저장소에 맞게 수정)
+// Jenkins 작업 이름: simulator / Script Path: services/simulator/Jenkinsfile
+// 다른 서비스는 이 파일을 복사해 simulator → 내 서비스 이름으로 바꾼다
+// 디스코드 알림 보내기 (웹훅 주소는 Jenkins 비밀값 discord-webhook 에만 있음)
+def notifyDiscord(String msg) {
+  withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_HOOK')]) {
+    writeFile file: 'discord.json', text: groovy.json.JsonOutput.toJson([content: msg]), encoding: 'UTF-8'
+    sh 'curl -fsS -H "Content-Type: application/json" -d @discord.json "$DISCORD_HOOK" || echo "디스코드 알림 실패 (빌드 결과에는 영향 없음)"'
+  }
+}
+
+pipeline {
+  agent any
+  options { disableConcurrentBuilds() }
+  triggers { pollSCM('H/2 * * * *') }   // 2분마다 GitHub 확인 (t1-ci는 내부망이라 웹훅 대신)
+
+  environment {
+    GH       = credentials('github')    // GH_USR(아이디), GH_PSW(토큰)
+    ORG_REPO = 'ktcloud-cloudnative-2026/team01-VisionUs'
+    IMAGE    = 'ghcr.io/ktcloud-cloudnative-2026/team01-visionus/simulator'
+  }
+
+  stages {
+    stage('시작 조건') {
+      // simulator이 바뀌지 않은 커밋(배포 PR 머지 포함)이면 아무것도 하지 않는다
+      when { not { anyOf { changeset 'services/simulator/**'; triggeredBy 'UserIdCause' } } }
+      steps {
+        script { currentBuild.result = 'NOT_BUILT'; currentBuild.description = 'simulator 변경 없음' }
+      }
+    }
+    stage('준비') {
+      when { anyOf { changeset 'services/simulator/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        script { env.TAG = 'sha-' + sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim() }
+        echo "이미지: ${env.IMAGE}:${env.TAG}"
+      }
+    }
+    stage('테스트') {
+      when { anyOf { changeset 'services/simulator/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        sh 'docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$WORKSPACE/services/simulator":/src -w /src node:24-alpine sh -c "npm ci && npm test"'
+      }
+    }
+    stage('빌드') {
+      when { anyOf { changeset 'services/simulator/**'; triggeredBy 'UserIdCause' } }
+      steps { sh 'docker build --pull -t "$IMAGE:$TAG" -t "$IMAGE:latest" services/simulator' }
+    }
+    stage('스캔') {
+      when { anyOf { changeset 'services/simulator/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        sh 'trivy image --cache-dir "$JENKINS_HOME/.trivy-$JOB_NAME" --exit-code 1 --severity CRITICAL --ignore-unfixed "$IMAGE:$TAG"'
+      }
+    }
+    stage('올리기') {
+      // 로그인 정보를 이 빌드 폴더에만 둔다. 공용 위치(~/.docker)에 두면 다른 서비스 빌드가 끝나며
+      // logout 할 때 같이 지워져서, 동시에 올리던 빌드가 unauthorized 로 실패한다
+      when { anyOf { changeset 'services/simulator/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        sh '''
+          export DOCKER_CONFIG="$WORKSPACE/.docker-login"
+          echo "$GH_PSW" | docker login ghcr.io -u "$GH_USR" --password-stdin
+          docker push "$IMAGE:$TAG" && docker push "$IMAGE:latest"
+        '''
+      }
+    }
+    stage('배포 PR') {
+      // main은 보호되어 있어 직접 push하지 않고, 태그를 바꾼 브랜치를 올려 PR을 만든다
+      // dev는 자동: 만든 PR을 바로 머지한다 (prod는 사람이 PR을 승인해서 올림)
+      when { anyOf { changeset 'services/simulator/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        sh '''
+          set -e
+          BRANCH="deploy/dev-simulator-$TAG"
+          git checkout -B "$BRANCH" origin/main
+          (cd deploy/overlays/dev && kustomize edit set image "$IMAGE:$TAG")
+          if git diff --quiet; then echo "바뀐 것 없음"; exit 0; fi
+          git -c user.name="jenkins" -c user.email="jenkins@team01.local" commit -am "deploy(dev): simulator $TAG"
+          git push "https://$GH_USR:$GH_PSW@github.com/$ORG_REPO.git" "HEAD:refs/heads/$BRANCH"
+          cat > pr.json <<EOF
+{"title":"deploy(dev): simulator $TAG","head":"$BRANCH","base":"main","body":"Jenkins 빌드 #$BUILD_NUMBER 가 만든 dev 배포 PR입니다. Jenkins가 바로 자동 머지하고, Argo CD가 dev에 배포합니다."}
+EOF
+          if curl -fsS -X POST -H "Authorization: Bearer $GH_PSW" -H "Accept: application/vnd.github+json" \
+               "https://api.github.com/repos/$ORG_REPO/pulls" -d @pr.json -o pr-res.json; then
+            grep -o '"html_url": *"[^"]*/pull/[0-9]*"' pr-res.json | head -1 | sed -E 's/.*"(https[^"]+)"/\\1/' > pr-url.txt
+            cat pr-url.txt
+            PR_NUM=$(grep -o '"number": *[0-9]*' pr-res.json | head -1 | grep -o '[0-9]*$' || true)
+            for i in 1 2 3; do   # 막 만든 PR은 GitHub이 머지 가능 여부를 계산하는 중일 수 있어 3번까지 시도
+              if [ -n "$PR_NUM" ] && curl -fsS -X PUT -H "Authorization: Bearer $GH_PSW" -H "Accept: application/vnd.github+json" \
+                   "https://api.github.com/repos/$ORG_REPO/pulls/$PR_NUM/merge" -d '{"merge_method":"squash"}' -o merge-res.json; then
+                echo merged > merged.txt
+                curl -fsS -X DELETE -H "Authorization: Bearer $GH_PSW" -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/repos/$ORG_REPO/git/refs/heads/$BRANCH" || true
+                echo "dev 배포 PR #$PR_NUM 자동 머지 완료"
+                break
+              fi
+              sleep 5
+            done
+            [ -f merged.txt ] || echo "자동 머지 실패. PR을 직접 머지하세요."
+          else
+            echo "PR 자동 생성 실패. 이 링크로 PR을 만드세요: https://github.com/$ORG_REPO/compare/main...$BRANCH?expand=1"
+          fi
+        '''
+      }
+    }
+  }
+  post {
+    always { sh 'rm -rf "$WORKSPACE/.docker-login"' }   // 이 빌드의 로그인 정보만 지움
+    success {
+      script {
+        if (env.TAG) {   // simulator이 바뀌어서 실제로 빌드한 경우에만
+          def pr = fileExists('pr-url.txt') ? readFile('pr-url.txt').trim() : '(PR 링크 없음)'
+          if (fileExists('merged.txt')) {
+            notifyDiscord("✅ **simulator** 빌드 성공 → dev 자동 배포\n태그: `${env.TAG}`\nPR(자동 머지): ${pr}\nArgo CD가 몇 분 안에 dev에 반영합니다.")
+          } else {
+            notifyDiscord("✅ **simulator** 빌드 성공 → dev 배포 PR 생성 (자동 머지 실패)\n태그: `${env.TAG}`\nPR: ${pr}\nPR을 직접 머지하면 Argo CD가 dev에 배포합니다.")
+          }
+        }
+      }
+    }
+    failure {
+      script {
+        notifyDiscord("❌ **simulator** 빌드 실패 (#${env.BUILD_NUMBER})\n태그: `${env.TAG ?: '-'}`\nJenkins에서 simulator 작업의 Console Output을 확인해 주세요.")
+      }
+    }
+    cleanup { sh 'rm -f pr.json pr-res.json pr-url.txt merge-res.json merged.txt discord.json' }
+  }
+}
