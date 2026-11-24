@@ -13,7 +13,7 @@ spec:
       labels: { app: web, part-of: homeiot }
     spec:
       securityContext: { runAsNonRoot: true, runAsUser: 1000 }
-       imagePullSecrets:
+      imagePullSecrets:
         - name: ghcr-pull          # 비공개 GHCR 이미지를 받을 출입증
       containers:
         - name: web
