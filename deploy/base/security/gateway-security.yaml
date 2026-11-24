@@ -1,0 +1,59 @@
+# 입구(Gateway)에서 JWT 토큰 검사
+# 서비스는 토큰을 직접 검사하지 않고, Gateway가 넣어 준 x-user-id / x-user-email 헤더만 믿는다.
+# 1) 바깥에서 몰래 넣은 x-user-* 헤더를 가장 먼저 지운다
+# 2) 토큰이 맞으면 토큰 안의 값(sub, email)으로 헤더를 다시 채운다
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: strip-user-headers
+  namespace: home-iot
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: home-iot
+  headers:
+    earlyRequestHeaders:
+      remove:
+        - x-user-id
+        - x-user-email
+---
+# 로그인이 필요한 주소에만 토큰 검사 (auth 공개 주소, sample, simulator, web은 검사 없음)
+# 공개키는 같은 클러스터의 auth에서 직접 받아 온다 (dev, prod가 각자 자기 키를 씀)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: jwt
+  namespace: home-iot
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: auth-protected
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: device
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: control
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: telemetry
+  jwt:
+    providers:
+      - name: homeiot-auth
+        issuer: homeiot-auth
+        audiences:
+          - homeiot
+        remoteJWKS:
+          uri: http://auth.home-iot.svc.cluster.local/api/v1/auth/.well-known/jwks.json
+          backendRefs:
+            - group: ""
+              kind: Service
+              name: auth
+              port: 80
+        claimToHeaders:
+          - header: x-user-id
+            claim: sub
+          - header: x-user-email
+            claim: email
