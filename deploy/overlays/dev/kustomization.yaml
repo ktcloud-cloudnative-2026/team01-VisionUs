@@ -23,7 +23,7 @@ images:
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/sample
   newTag: sha-ae4a119
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/simulator
-  newTag: sha-6b7e8ec
+  newTag: sha-4f51360
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/telemetry
   newTag: sha-907bedb
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web
