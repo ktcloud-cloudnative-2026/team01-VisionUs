@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 COPY common ./common
 RUN npm ci --omit=dev
 COPY src ./src
+COPY public ./public
 
 # 2단계 (도시락): 깨끗한 alpine에 node 실행 파일과 결과물만 담습니다
 FROM alpine:3.24
