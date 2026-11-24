@@ -26,9 +26,9 @@ images:
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/telemetry
   newTag: sha-907bedb
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web
-  newTag: latest
+  newTag: sha-a2703fe
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web-nginx
-  newTag: latest
+  newTag: sha-a2703fe
 
 # dev 환경 설정값 (비밀번호는 Secret home-iot-secrets 에. Git엔 안 올림)
 configMapGenerator:
