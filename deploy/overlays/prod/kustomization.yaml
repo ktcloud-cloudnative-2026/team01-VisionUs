@@ -4,11 +4,29 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - ../../base/platform
+- ../../base/security
 - ../../base/infra
+- ../../base/auth
+- ../../base/device
 - ../../base/control
+- ../../base/telemetry
+- ../../base/simulator
+- ../../base/web
 images:
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/auth
+  newTag: sha-2c300d1
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/control
-  newTag: sha-c3b55f7
+  newTag: sha-ae4a119
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/device
+  newTag: sha-8969fb0
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/simulator
+  newTag: sha-4f51360
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/telemetry
+  newTag: sha-907bedb
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web
+  newTag: sha-9c09a99
+- name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web-nginx
+  newTag: sha-9c09a99
 # prod 환경 설정값 (dev와 DB_SCHEMA만 다름)
 configMapGenerator:
 - name: home-iot-config
@@ -23,3 +41,6 @@ configMapGenerator:
   - MQTT_URL=mqtt://mosquitto:1883
   - DEVICE_SERVICE_URL=http://device
   - COMMAND_TIMEOUT_MS=5000
+  - OFFLINE_AFTER_SEC=20
+  - SIM_INTERVAL_SEC="5"
+  - SIM_FLOOR_MOVE_MS="1500"
