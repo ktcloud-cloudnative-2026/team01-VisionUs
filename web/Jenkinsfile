@@ -1,0 +1,177 @@
+// web · web-nginx 서비스 파이프라인 (simulator Jenkinsfile 기준으로 맞춤)
+// Jenkins 작업 이름: web / Script Path: web/Jenkinsfile.web
+//   - web       : web/   → ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web
+//   - web-nginx : nginx/ → ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web-nginx
+//   - 바뀐 쪽만 빌드·push 하고, dev 오버레이에서도 바뀐 이미지 태그만 갱신한다
+//     (수동 실행(Build Now)이면 둘 다 빌드)
+// 디스코드 알림 보내기 (웹훅 주소는 Jenkins 비밀값 discord-webhook 에만 있음)
+def notifyDiscord(String msg) {
+  withCredentials([string(credentialsId: 'discord-webhook', variable: 'DISCORD_HOOK')]) {
+    writeFile file: 'discord.json', text: groovy.json.JsonOutput.toJson([content: msg]), encoding: 'UTF-8'
+    sh 'curl -fsS -H "Content-Type: application/json" -d @discord.json "$DISCORD_HOOK" || echo "디스코드 알림 실패 (빌드 결과에는 영향 없음)"'
+  }
+}
+
+pipeline {
+  agent any
+  options { disableConcurrentBuilds() }
+  triggers { pollSCM('H/2 * * * *') }   // 2분마다 GitHub 확인 (t1-ci는 내부망이라 웹훅 대신)
+
+  environment {
+    GH          = credentials('github')    // GH_USR(아이디), GH_PSW(토큰)
+    ORG_REPO    = 'ktcloud-cloudnative-2026/team01-VisionUs'
+    WEB_IMAGE   = 'ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web'
+    NGINX_IMAGE = 'ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web-nginx'
+  }
+
+  stages {
+    stage('시작 조건') {
+      // web·web-nginx 둘 다 바뀌지 않은 커밋(배포 PR 머지 포함)이면 아무것도 하지 않는다
+      when { not { anyOf { changeset 'web/**'; changeset 'nginx/**'; triggeredBy 'UserIdCause' } } }
+      steps {
+        script { currentBuild.result = 'NOT_BUILT'; currentBuild.description = 'web·web-nginx 변경 없음' }
+      }
+    }
+    stage('준비') {
+      when { anyOf { changeset 'web/**'; changeset 'nginx/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        script {
+          env.TAG = 'sha-' + sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
+          env.WEB_BUILT = 'false'
+          env.NGINX_BUILT = 'false'
+        }
+        echo "태그: ${env.TAG}"
+      }
+    }
+
+    // ---------------- web (Next.js) ----------------
+    stage('web 테스트') {
+      when { anyOf { changeset 'web/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        // test 스크립트가 없으면 건너뜀(--if-present)
+        sh 'docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$WORKSPACE/web":/src -w /src node:24-alpine sh -c "npm ci && npm test --if-present"'
+      }
+    }
+    stage('web 빌드') {
+      when { anyOf { changeset 'web/**'; triggeredBy 'UserIdCause' } }
+      steps { sh 'docker build --pull -t "$WEB_IMAGE:$TAG" -t "$WEB_IMAGE:latest" web' }
+    }
+    stage('web 스캔') {
+      when { anyOf { changeset 'web/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        sh 'trivy image --cache-dir "$JENKINS_HOME/.trivy-$JOB_NAME" --exit-code 1 --severity CRITICAL --ignore-unfixed "$WEB_IMAGE:$TAG"'
+        script { env.WEB_BUILT = 'true' }
+      }
+    }
+
+    // ---------------- web-nginx ----------------
+    stage('web-nginx 빌드') {
+      when { anyOf { changeset 'nginx/**'; triggeredBy 'UserIdCause' } }
+      steps { sh 'docker build --pull -t "$NGINX_IMAGE:$TAG" -t "$NGINX_IMAGE:latest" nginx' }
+    }
+    stage('web-nginx 설정 검사') {
+      when { anyOf { changeset 'nginx/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        // nginx 설정 문법 검사 (upstream 'web' 이름은 검사용으로 127.0.0.1 로 대신 풀어줌)
+        sh 'docker run --rm --add-host web:127.0.0.1 "$NGINX_IMAGE:$TAG" nginx -t'
+      }
+    }
+    stage('web-nginx 스캔') {
+      when { anyOf { changeset 'nginx/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        sh 'trivy image --cache-dir "$JENKINS_HOME/.trivy-$JOB_NAME" --exit-code 1 --severity CRITICAL --ignore-unfixed "$NGINX_IMAGE:$TAG"'
+        script { env.NGINX_BUILT = 'true' }
+      }
+    }
+
+    stage('올리기') {
+      // 로그인 정보를 이 빌드 폴더에만 둔다. 공용 위치(~/.docker)에 두면 다른 서비스 빌드가 끝나며
+      // logout 할 때 같이 지워져서, 동시에 올리던 빌드가 unauthorized 로 실패한다
+      when { anyOf { changeset 'web/**'; changeset 'nginx/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        sh '''
+          set -e
+          export DOCKER_CONFIG="$WORKSPACE/.docker-login"
+          echo "$GH_PSW" | docker login ghcr.io -u "$GH_USR" --password-stdin
+          if [ "$WEB_BUILT" = "true" ]; then
+            docker push "$WEB_IMAGE:$TAG" && docker push "$WEB_IMAGE:latest"
+          fi
+          if [ "$NGINX_BUILT" = "true" ]; then
+            docker push "$NGINX_IMAGE:$TAG" && docker push "$NGINX_IMAGE:latest"
+          fi
+        '''
+      }
+    }
+    stage('배포 PR') {
+      // main은 보호되어 있어 직접 push하지 않고, 태그를 바꾼 브랜치를 올려 PR을 만든다
+      // dev는 자동: 만든 PR을 바로 머지한다 (prod는 사람이 PR을 승인해서 올림)
+      when { anyOf { changeset 'web/**'; changeset 'nginx/**'; triggeredBy 'UserIdCause' } }
+      steps {
+        sh '''
+          set -e
+          NAMES=""
+          [ "$WEB_BUILT" = "true" ]   && NAMES="web"
+          [ "$NGINX_BUILT" = "true" ] && NAMES="${NAMES:+$NAMES·}web-nginx"
+          BRANCH="deploy/dev-web-$TAG"
+          git checkout -B "$BRANCH" origin/main
+          (
+            cd deploy/overlays/dev
+            if [ "$WEB_BUILT" = "true" ];   then kustomize edit set image "$WEB_IMAGE:$TAG"; fi
+            if [ "$NGINX_BUILT" = "true" ]; then kustomize edit set image "$NGINX_IMAGE:$TAG"; fi
+          )
+          if git diff --quiet; then echo "바뀐 것 없음"; exit 0; fi
+          git -c user.name="jenkins" -c user.email="jenkins@team01.local" commit -am "deploy(dev): $NAMES $TAG"
+          git push "https://$GH_USR:$GH_PSW@github.com/$ORG_REPO.git" "HEAD:refs/heads/$BRANCH"
+          cat > pr.json <<EOF
+{"title":"deploy(dev): $NAMES $TAG","head":"$BRANCH","base":"main","body":"Jenkins 빌드 #$BUILD_NUMBER 가 만든 dev 배포 PR입니다 ($NAMES). Jenkins가 바로 자동 머지하고, Argo CD가 dev에 배포합니다."}
+EOF
+          if curl -fsS -X POST -H "Authorization: Bearer $GH_PSW" -H "Accept: application/vnd.github+json" \
+               "https://api.github.com/repos/$ORG_REPO/pulls" -d @pr.json -o pr-res.json; then
+            grep -o '"html_url": *"[^"]*/pull/[0-9]*"' pr-res.json | head -1 | sed -E 's/.*"(https[^"]+)"/\\1/' > pr-url.txt
+            cat pr-url.txt
+            PR_NUM=$(grep -o '"number": *[0-9]*' pr-res.json | head -1 | grep -o '[0-9]*$' || true)
+            for i in 1 2 3; do   # 막 만든 PR은 GitHub이 머지 가능 여부를 계산하는 중일 수 있어 3번까지 시도
+              if [ -n "$PR_NUM" ] && curl -fsS -X PUT -H "Authorization: Bearer $GH_PSW" -H "Accept: application/vnd.github+json" \
+                   "https://api.github.com/repos/$ORG_REPO/pulls/$PR_NUM/merge" -d '{"merge_method":"squash"}' -o merge-res.json; then
+                echo merged > merged.txt
+                curl -fsS -X DELETE -H "Authorization: Bearer $GH_PSW" -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/repos/$ORG_REPO/git/refs/heads/$BRANCH" || true
+                echo "dev 배포 PR #$PR_NUM 자동 머지 완료"
+                break
+              fi
+              sleep 5
+            done
+            [ -f merged.txt ] || echo "자동 머지 실패. PR을 직접 머지하세요."
+          else
+            echo "PR 자동 생성 실패. 이 링크로 PR을 만드세요: https://github.com/$ORG_REPO/compare/main...$BRANCH?expand=1"
+          fi
+        '''
+      }
+    }
+  }
+  post {
+    always { sh 'rm -rf "$WORKSPACE/.docker-login"' }   // 이 빌드의 로그인 정보만 지움
+    success {
+      script {
+        if (env.TAG) {   // web·web-nginx 가 바뀌어서 실제로 빌드한 경우에만
+          def built = []
+          if (env.WEB_BUILT == 'true')   { built << 'web' }
+          if (env.NGINX_BUILT == 'true') { built << 'web-nginx' }
+          def names = built.join('·')
+          def pr = fileExists('pr-url.txt') ? readFile('pr-url.txt').trim() : '(PR 링크 없음)'
+          if (fileExists('merged.txt')) {
+            notifyDiscord("✅ **${names}** 빌드 성공 → dev 자동 배포\n태그: `${env.TAG}`\nPR(자동 머지): ${pr}\nArgo CD가 몇 분 안에 dev에 반영합니다.")
+          } else {
+            notifyDiscord("✅ **${names}** 빌드 성공 → dev 배포 PR 생성 (자동 머지 실패)\n태그: `${env.TAG}`\nPR: ${pr}\nPR을 직접 머지하면 Argo CD가 dev에 배포합니다.")
+          }
+        }
+      }
+    }
+    failure {
+      script {
+        notifyDiscord("❌ **web·web-nginx** 빌드 실패 (#${env.BUILD_NUMBER})\n태그: `${env.TAG ?: '-'}`\nJenkins에서 web 작업의 Console Output을 확인해 주세요.")
+      }
+    }
+    cleanup { sh 'rm -f pr.json pr-res.json pr-url.txt merge-res.json merged.txt discord.json' }
+  }
+}
