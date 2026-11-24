@@ -1,0 +1,45 @@
+# 화면: Envoy Gateway → web-nginx(정적 캐시·프록시) → web(Next.js)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-nginx
+  labels: { app: web-nginx, part-of: homeiot }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: web-nginx }
+  template:
+    metadata:
+      labels: { app: web-nginx, part-of: homeiot }
+    spec:
+      containers:
+        - name: nginx
+          image: homeiot/web-nginx
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /nginx-health, port: http }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          volumeMounts:
+            - name: cache
+              mountPath: /var/cache/nginx
+      volumes:
+        - name: cache
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-nginx
+  labels: { app: web-nginx, part-of: homeiot }
+spec:
+  selector: { app: web-nginx }
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
