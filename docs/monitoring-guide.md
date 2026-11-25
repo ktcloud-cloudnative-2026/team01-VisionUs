@@ -30,6 +30,8 @@
 ## 0. 무엇이 어디에 생기나
 
 ```
+Envoy Gateway (envoy-gateway-system)  ── 입구 요청 지표 (:19001 /stats/prometheus)
+MQTT 브로커 mosquitto (home-iot)       ── 브로커 지표 (exporter 사이드카 :9234 /metrics)
 서비스 Pod (home-iot 네임스페이스)
   auth · control · device · telemetry · simulator
    │  /metrics (이미 코드에 있음: common/src/service.js)    │  stdout JSON 로그 (common/src/logger.js)
@@ -51,21 +53,42 @@ Prometheus  ── 지표 수집                     Alloy ── 로그 수집 
 - dev · prod 클러스터에 **각각 따로** 설치합니다
 - 워커 메모리는 3~4GB 정도 더 씁니다
 
-**서비스 코드와 `deploy/base/` 는 고칠 것이 없습니다.** `/metrics` 와 JSON 로그는 이미 공통 코드에 있고, Service에도 `app` 라벨과 `http` 포트 이름이 이미 있습니다.
+**수집 대상**
+
+| 대상 | 어떻게 | 보이는 것 |
+|------|--------|-----------|
+| 서비스 5개 (auth · control · device · telemetry · simulator) | 코드에 이미 있는 `/metrics` | 서비스 안의 요청 수 · 에러 · 응답 시간, 업무 지표 (`homeiot_*`) |
+| Envoy Gateway | Envoy 기본 지표 (PodMonitor) | 입구에서 본 요청 · 에러 · 응답 시간. JWT 거부 · 503처럼 서비스까지 못 간 요청, `/metrics` 가 없는 web 포함 |
+| MQTT 브로커 (mosquitto) | exporter 사이드카 추가 | 연결 클라이언트 수 · 메시지 수 · 버려진 메시지 수 |
+| 노드 · 파드 | kube-prometheus-stack 기본 | CPU · 메모리 · 재시작 수 |
+| 로그 | Alloy | 모든 파드의 stdout (web · web-nginx 포함) |
+
+- **서비스 코드는 고칠 것이 없습니다.** `/metrics` 와 JSON 로그는 이미 공통 코드에 있고, Service에도 `app` 라벨과 `http` 포트 이름이 이미 있습니다
+- **`deploy/base/infra/mosquitto.yaml` 하나만 고칩니다.** mosquitto는 `/metrics` 가 없어서, 브로커 지표를 내는 exporter 컨테이너를 같은 파드에 붙입니다 (1절)
 
 ## 1. 파일 구성
 
 ```
 deploy/
+  base/infra/
+    mosquitto.yaml               (수정) MQTT 브로커에 exporter 사이드카 + metrics 포트 추가
   monitoring/                    모니터링 관련 파일은 전부 이 폴더에
     README.md
     monitoring-dev.yaml          dev 클러스터용 Argo CD 앱 (차트 3개 + 버전)
     monitoring-prod.yaml         prod 클러스터용 (이름만 다름)
     values/
-      kube-prometheus-stack.yaml Prometheus · Grafana · 우리 서비스 수집 목록
+      kube-prometheus-stack.yaml Prometheus · Grafana · 수집 목록 (서비스 · MQTT 브로커 · Envoy Gateway)
       loki.yaml                  Loki
       alloy.yaml                 로그 수집기
 ```
+
+**`deploy/base/infra/mosquitto.yaml` 에서 바뀌는 곳**
+
+- Deployment `containers:` 에 `exporter` 컨테이너 추가 (이미지 `sapcc/mosquitto-exporter:0.8.0`)
+  - 같은 파드 안의 브로커(`127.0.0.1:1883`)에 접속해 `$SYS` 토픽을 구독하고, 9234 포트로 지표를 냅니다
+  - 브로커 계정은 mosquitto와 같은 Secret `home-iot-secrets` 의 `MQTT_USERNAME` · `MQTT_PASSWORD` 를 씁니다
+- Service `ports:` 에 `metrics` (9234) 추가. 서비스들이 쓰는 1883 포트는 그대로입니다
+- 이 파일은 앱 배포(`home-iot-dev` · `home-iot-prod`) 쪽 파일이라, 모니터링과 별개로 **앱 배포 Argo CD가 반영**합니다
 
 | 차트 | 버전 | 저장소 |
 |------|------|--------|
@@ -139,6 +162,7 @@ cp -r ~/mon-src/team01/. ~/team01/
 
 ```
 docs/monitoring-guide.md
+deploy/base/infra/mosquitto.yaml
 deploy/monitoring/README.md
 deploy/monitoring/monitoring-dev.yaml
 deploy/monitoring/monitoring-prod.yaml
@@ -148,6 +172,8 @@ deploy/monitoring/values/alloy.yaml
 ```
 
 zip을 새로 받았을 때(가이드 · 설정이 바뀐 경우)도 1) → 3) 을 다시 하면 덮어써집니다.
+
+`deploy/base/infra/mosquitto.yaml` 은 저장소에 원래 있던 파일을 **통째로 덮어씁니다.** 그 사이 다른 팀원이 이 파일을 고쳤다면 그 변경이 사라질 수 있으니, 5) 에서 `git diff deploy/base/infra/mosquitto.yaml` 로 **exporter · metrics 추가 줄만** `+` 로 보이는지 꼭 확인합니다.
 
 **4) 안내 README 2개 고치기 (선택이지만 권장)**
 
@@ -182,23 +208,26 @@ git status --short
 ```
  M README.md                  ← 4) 를 했을 때만
  M deploy/README.md           ← 4) 를 했을 때만
+ M deploy/base/infra/mosquitto.yaml
 ?? deploy/monitoring/
 ?? docs/monitoring-guide.md
 ```
 
-- 바뀐 내용 보기: `git diff` (각 README에 `+` 로 시작하는 줄 하나씩. 나올 때는 `q`)
+- 바뀐 내용 보기: `git diff` (나올 때는 `q`)
+  - 각 README: `+` 줄 하나씩
+  - `mosquitto.yaml`: `+` 줄만 있고 `-` 줄은 없어야 함 (exporter 컨테이너 18줄 + Service metrics 포트 3줄)
 - 다른 파일이 `M` 으로 나오면 실수로 바뀐 것입니다. `git restore <파일명>` 으로 되돌립니다
 
 **6) 커밋하고 올리기**
 
 ```bash
-git add deploy/monitoring docs/monitoring-guide.md README.md deploy/README.md
+git add deploy/monitoring deploy/base/infra/mosquitto.yaml docs/monitoring-guide.md README.md deploy/README.md
 git status         # 비밀번호 · kube config 가 목록에 없는지 확인
 git commit -m "feat: 모니터링 스택 Argo CD 배포 설정 추가 (#<이슈번호>)"
 git push -u origin feat/<이슈번호>-monitoring
 ```
 
-GitHub 저장소 페이지의 **Compare & pull request** 버튼으로 PR을 만들고 **클러스터 · GitOps 담당을 리뷰어로** 지정합니다. merge되면 4단계로 갑니다.
+GitHub 저장소 페이지의 **Compare & pull request** 버튼으로 PR을 만들고 **클러스터 · GitOps 담당을 리뷰어로** 지정합니다. `mosquitto.yaml` 은 앱 배포 파일이므로 **MQTT · Device 담당도 리뷰어로** 넣습니다. merge되면 4단계로 갑니다.
 
 **7) 정리 (선택)**: `rm -rf ~/mon-src ~/team01-monitoring.zip`
 
@@ -234,6 +263,10 @@ kubectl -n monitoring get pods -o wide   # 모두 Running, NODE 칸은 워커
 kubectl -n monitoring get pvc            # 모두 Bound
 kubectl -n monitoring get svc kps-grafana kps-kube-prometheus-stack-prometheus
 # EXTERNAL-IP 칸이 아래 표의 고정 주소와 같으면 정상
+
+# MQTT 브로커 exporter (home-iot-dev 앱이 mosquitto.yaml 을 반영한 뒤)
+kubectl -n home-iot get pods -l app=mosquitto      # READY 2/2 (mosquitto + exporter)
+kubectl -n home-iot logs deploy/mosquitto -c exporter --tail=5   # "Connected to tcp://127.0.0.1:1883"
 ```
 
 ### 브라우저로 Grafana · Prometheus 보기
@@ -274,7 +307,10 @@ ssh -N -L 13000:10.10.21.220:80 -L 19090:10.10.21.221:9090 <bastion 접속 계�
 **3) 브라우저 열기**
 
 - Grafana: `http://localhost:13000` → `admin` / 4단계에서 정한 비밀번호
-- Prometheus: `http://localhost:19090` → 상단 **Status → Target health** 에서 `home-iot` 항목이 모두 **UP** 이면 우리 서비스 수집 정상
+- Prometheus: `http://localhost:19090` → 상단 **Status → Target health** 에서 아래 3개가 모두 **UP** 이면 수집 정상
+  - `serviceMonitor/monitoring/home-iot` (서비스 5개)
+  - `serviceMonitor/monitoring/home-iot-mqtt` (MQTT 브로커)
+  - `podMonitor/monitoring/envoy-gateway-proxy` (Envoy Gateway)
 
 Prometheus 화면에는 로그인이 없습니다. 팀 VM끼리만 통하는 주소라 외부에는 열리지 않지만, 주소를 팀 밖에 공유하지 않습니다.
 
@@ -286,8 +322,16 @@ Prometheus 화면에는 로그인이 없습니다. 팀 VM끼리만 통하는 주
 | 서비스별 요청 수 | `sum by (service) (rate(http_requests_total[5m]))` |
 | 서비스별 에러율 | `sum by (service) (rate(http_requests_total{status=~"5.."}[5m])) / sum by (service) (rate(http_requests_total[5m]))` |
 | 서비스별 p95 응답 시간 | `histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))` |
+| Envoy Gateway 경로별 요청 수 (web 포함) | `sum by (envoy_cluster_name) (rate(envoy_cluster_upstream_rq_total[5m]))` |
+| Envoy Gateway 경로별 5xx 에러 | `sum by (envoy_cluster_name) (rate(envoy_cluster_upstream_rq_xx{envoy_response_code_class="5"}[5m]))` |
+| MQTT 연결 클라이언트 수 | `broker_clients_connected` |
+| MQTT 메시지 수신 · 발행 (초당) | `rate(broker_publish_messages_received[5m])` · `rate(broker_publish_messages_sent[5m])` |
+| MQTT 버려진 메시지 | `increase(broker_publish_messages_dropped[5m])` |
+| telemetry가 받은 MQTT 메시지 (서비스 쪽) | `sum by (channel) (rate(homeiot_mqtt_messages_total[5m]))` |
 
-`service` 라벨은 코드가 붙인 이름(`auth-service` 등)입니다.
+- `service` 라벨은 코드가 붙인 이름(`auth-service` 등)입니다
+- `broker_clients_connected` 에는 **exporter 자신도 1개로 포함**됩니다. 서비스 · 시뮬레이터가 모두 끊기면 0이 아니라 **1** 이 됩니다
+- 브로커 지표(`broker_*`)는 브로커가 센 값이고, `homeiot_mqtt_messages_total` 은 telemetry가 센 값입니다. 브로커 수신은 늘어나는데 telemetry 수신이 멈췄다면 telemetry 쪽 문제, 둘 다 멈췄다면 브로커 · 시뮬레이터 쪽 문제입니다
 
 ### 로그 (Grafana Explore → Loki)
 
@@ -304,7 +348,8 @@ Prometheus 화면에는 로그인이 없습니다. 팀 VM끼리만 통하는 주
 | 바꾸는 것 | 파일 | 반영 |
 |-----------|------|------|
 | 보관 기간 · 용량 · 메모리 | `deploy/monitoring/values/*.yaml` | merge하면 자동 |
-| 수집할 서비스 추가 | `kube-prometheus-stack.yaml` 의 `additionalServiceMonitors` → `values: [...]` 에 이름 추가 | merge하면 자동 |
+| 수집할 서비스 추가 | `kube-prometheus-stack.yaml` 의 `additionalServiceMonitors` → `home-iot` 의 `values: [...]` 에 이름 추가 | merge하면 자동 |
+| MQTT exporter 이미지 · 메모리 | `deploy/base/infra/mosquitto.yaml` 의 `exporter` 컨테이너 | merge하면 앱 배포 Argo CD가 반영 (mosquitto 파드 재시작) |
 | 브라우저 접속 IP | `deploy/monitoring/monitoring-dev.yaml` · `monitoring-prod.yaml` 의 `metallb.io/loadBalancerIPs` | merge 후 cp 노드에서 `git pull` → `kubectl apply -f` 다시 |
 | 차트 버전 | `deploy/monitoring/monitoring-dev.yaml` · `monitoring-prod.yaml` 의 `targetRevision` | merge 후 cp 노드에서 `git pull` → `kubectl apply -f` 다시 |
 
@@ -326,4 +371,8 @@ Prometheus 화면에는 로그인이 없습니다. 팀 VM끼리만 통하는 주
 | `up{namespace="home-iot"}` 에 서비스가 없음 | values 목록에 이름이 없거나 Service의 `app` 라벨이 다름 | `kubectl -n home-iot get svc --show-labels` 와 목록 비교 |
 | Grafana에서 Loki 오류 `no org id` | `auth_enabled: false` 빠짐 | loki.yaml 확인 |
 | 워커 하나가 꺼지면 Prometheus · Loki가 Pending | local-path는 데이터가 한 노드에만 있음 | 노드를 다시 켜면 복구. 실습 환경에서는 감수 |
+| `home-iot-mqtt` Target이 없음 | mosquitto.yaml 이 아직 반영 안 됨 (Service에 metrics 포트 없음) | `kubectl -n home-iot get svc mosquitto` 에 `9234` 가 있는지 → 없으면 `home-iot-dev` 앱 Sync 상태 확인 |
+| `home-iot-mqtt` Target이 DOWN, exporter 로그에 `not authorized` | 브로커 계정이 틀림 | exporter의 `MQTT_USER` · `MQTT_PASS` 가 `home-iot-secrets` 의 `MQTT_USERNAME` · `MQTT_PASSWORD` 를 가리키는지 확인 |
+| `broker_*` 지표가 비어 있음 | exporter가 아직 `$SYS` 값을 못 받음 (브로커는 10초마다 발행) | 1분 뒤 다시 조회. 계속 비면 exporter 로그 확인 |
+| `envoy-gateway-proxy` Target이 DOWN | Envoy 파드의 지표 포트 이름이 `metrics` 가 아님 | `kubectl -n envoy-gateway-system get pods -l app.kubernetes.io/component=proxy -o jsonpath='{.items[0].spec.containers[*].ports}'` 로 19001 포트 이름 확인 → values의 `port:` 수정 |
 | Grafana 로그인 실패 | Secret 비밀번호와 다름 | `kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' \| base64 -d` |
