@@ -1,0 +1,67 @@
+# kube-prometheus-stack 설정 (Prometheus · Grafana · node-exporter · kube-state-metrics)
+# 차트 버전은 deploy/monitoring/monitoring-*.yaml 의 targetRevision 에서 관리합니다.
+# 가이드: docs/monitoring-guide.md
+
+prometheus:
+  service:
+    type: LoadBalancer        # 브라우저 접속용. IP는 monitoring-dev/prod.yaml 에서 고정 (가이드 5단계)
+  prometheusSpec:
+    retention: 7d                                   # 지표 보관 기간
+    serviceMonitorSelectorNilUsesHelmValues: false  # 차트 밖에서 만든 ServiceMonitor도 읽음
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests: { cpu: 200m, memory: 1Gi }
+      limits:   { memory: 2Gi }
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+  # 우리 서비스 /metrics 수집
+  # - deploy/base/<서비스>/service.yaml 의 app 라벨과 http 포트를 그대로 사용 (서비스 쪽 수정 없음)
+  # - 서비스를 새로 추가하면 values 목록에 이름만 추가
+  additionalServiceMonitors:
+    - name: home-iot
+      namespaceSelector:
+        matchNames: [home-iot]
+      selector:
+        matchExpressions:
+          - key: app
+            operator: In
+            values: [auth, control, device, telemetry, simulator, sample]
+      endpoints:
+        - port: http
+          path: /metrics
+          interval: 30s
+          honorLabels: true   # 코드가 붙인 service 라벨(예: auth-service)을 그대로 유지
+
+alertmanager:
+  enabled: false              # 알림은 Grafana에서 보냄
+
+grafana:
+  admin:                      # 비밀번호는 Git에 올리지 않음 → Secret grafana-admin (가이드 4단계)
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  defaultDashboardsTimezone: Asia/Seoul
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 2Gi
+  service:
+    type: LoadBalancer        # 브라우저 접속용. IP는 monitoring-dev/prod.yaml 에서 고정 (가이드 5단계)
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki-gateway.monitoring.svc.cluster.local
+
+# kubeadm 클러스터에서는 아래 4개가 127.0.0.1에서만 열려 있어 수집이 안 되고 DOWN으로 보임 → 끔
+kubeEtcd:              { enabled: false }
+kubeControllerManager: { enabled: false }
+kubeScheduler:         { enabled: false }
+kubeProxy:             { enabled: false }
