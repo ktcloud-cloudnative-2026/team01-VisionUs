@@ -32,7 +32,7 @@ prometheus:
         matchExpressions:
           - key: app
             operator: In
-            values: [auth, control, device, telemetry, simulator, sample]
+            values: [auth, control, device, telemetry, simulator]
       endpoints:
         - port: http
           path: /metrics
