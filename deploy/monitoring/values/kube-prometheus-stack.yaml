@@ -39,6 +39,34 @@ prometheus:
           interval: 30s
           honorLabels: true   # 코드가 붙인 service 라벨(예: auth-service)을 그대로 유지
 
+    # MQTT 브로커(mosquitto) 지표 — 연결 클라이언트 수 · 메시지 수 · 버려진 메시지 수
+    # deploy/base/infra/mosquitto.yaml 의 exporter 사이드카가 metrics 포트(9234)로 냄
+    - name: home-iot-mqtt
+      namespaceSelector:
+        matchNames: [home-iot]
+      selector:
+        matchLabels:
+          app: mosquitto
+      endpoints:
+        - port: metrics
+          path: /metrics
+          interval: 30s
+
+  # Envoy Gateway(외부 요청 입구) 지표 수집 — web 포함 경로별 요청 수 · 에러 · 응답 시간
+  # Envoy 프록시 파드는 19001 포트 /stats/prometheus 로 지표를 냄 (LoadBalancer Service에는 이 포트가 없어 PodMonitor 사용)
+  additionalPodMonitors:
+    - name: envoy-gateway-proxy
+      namespaceSelector:
+        matchNames: [envoy-gateway-system]
+      selector:
+        matchLabels:
+          app.kubernetes.io/component: proxy
+          app.kubernetes.io/managed-by: envoy-gateway
+      podMetricsEndpoints:
+        - port: metrics
+          path: /stats/prometheus
+          interval: 30s
+
 alertmanager:
   enabled: false              # 알림은 Grafana에서 보냄
 

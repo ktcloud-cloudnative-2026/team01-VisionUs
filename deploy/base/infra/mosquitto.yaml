@@ -65,6 +65,24 @@ spec:
               mountPath: /mosquitto/config
             - name: data
               mountPath: /mosquitto/data
+        # 브로커 지표 → /metrics (Prometheus 수집용, docs/monitoring-guide.md)
+        # 브로커의 $SYS 토픽을 구독해서 연결 수 · 메시지 수를 지표로 바꿔 줌
+        - name: exporter
+          image: sapcc/mosquitto-exporter:0.8.0
+          args: ["--endpoint", "tcp://127.0.0.1:1883", "--bind-address", "0.0.0.0:9234"]
+          env:
+            - name: MQTT_USER
+              valueFrom: { secretKeyRef: { name: home-iot-secrets, key: MQTT_USERNAME } }
+            - name: MQTT_PASS
+              valueFrom: { secretKeyRef: { name: home-iot-secrets, key: MQTT_PASSWORD } }
+            - name: MQTT_CLIENT_ID
+              value: mosquitto-exporter
+          ports:
+            - name: metrics
+              containerPort: 9234
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
       volumes:
         - name: config
           configMap: { name: mosquitto-config }
@@ -82,3 +100,6 @@ spec:
     - name: mqtt
       port: 1883
       targetPort: mqtt
+    - name: metrics          # 브로커 지표 (Prometheus 수집용)
+      port: 9234
+      targetPort: metrics
