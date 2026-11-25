@@ -31,7 +31,7 @@
 
 ```
 서비스 Pod (home-iot 네임스페이스)
-  auth · control · device · telemetry · simulator · sample
+  auth · control · device · telemetry · simulator
    │  /metrics (이미 코드에 있음: common/src/service.js)    │  stdout JSON 로그 (common/src/logger.js)
    ▼                                                        ▼
 Prometheus  ── 지표 수집                     Alloy ── 로그 수집 ──▶ Loki ── 로그 저장
