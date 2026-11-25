@@ -1,0 +1,54 @@
+# Argo CD 주문서: "모니터링 차트 3개를 deploy/monitoring/values 설정으로 dev 클러스터에 맞춰 둬라"
+# 이 파일은 클러스터에 처음 한 번 직접 apply 합니다 (docs/monitoring-guide.md 4단계). 
+# 차트 버전(targetRevision)을 바꾸면 merge 후 다시 apply 해야 반영됩니다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-dev
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/ktcloud-cloudnative-2026/team01-VisionUs.git
+      targetRevision: main
+      ref: values                      # 아래 $values = 이 저장소
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 93.10.0
+      helm:
+        releaseName: kps
+        valueFiles:
+          - $values/deploy/monitoring/values/kube-prometheus-stack.yaml
+        valuesObject:                  # dev 클러스터 전용 값: 브라우저 접속 주소 고정 (MetalLB dev 대역)
+          grafana:
+            service:
+              annotations:
+                metallb.io/loadBalancerIPs: 10.10.21.120   # Grafana
+          prometheus:
+            service:
+              annotations:
+                metallb.io/loadBalancerIPs: 10.10.21.121   # Prometheus
+    - repoURL: https://grafana-community.github.io/helm-charts
+      chart: loki
+      targetRevision: 21.6.0
+      helm:
+        releaseName: loki
+        valueFiles:
+          - $values/deploy/monitoring/values/loki.yaml
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: alloy
+      targetRevision: 1.16.0
+      helm:
+        releaseName: alloy
+        valueFiles:
+          - $values/deploy/monitoring/values/alloy.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:          # Git이 바뀌면 자동 배포
+      prune: true       # Git에서 지운 것은 클러스터에서도 지움
+      selfHeal: true    # 손으로 바꾸면 Git 상태로 되돌림
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true   # Prometheus CRD가 커서 이 옵션이 없으면 Sync 실패

@@ -1,0 +1,54 @@
+# Loki 설정 (로그 저장) — 파드 하나로 동작하는 Monolithic 모드
+# 차트: grafana-community/loki (2026-03부터 커뮤니티 저장소에서 관리)
+# 가이드: docs/monitoring-guide.md
+# 주의: 이 차트는 values 검사를 엄격하게 해서, 차트에 없는 키를 넣으면 Sync가 실패합니다.
+
+deploymentMode: Monolithic
+
+loki:
+  auth_enabled: false          # 팀 하나만 쓰므로 테넌트 구분 안 함
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem           # 별도 저장소(S3 등) 없이 PVC에 저장
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  limits_config:
+    retention_period: 168h     # 로그 보관 7일
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1                  # 기본값이 0이라 꼭 1로
+  persistence:
+    storageClass: local-path
+    size: 10Gi
+
+# 다른 모드용 부품은 전부 0개
+backend:        { replicas: 0 }
+read:           { replicas: 0 }
+write:          { replicas: 0 }
+ingester:       { replicas: 0 }
+querier:        { replicas: 0 }
+queryFrontend:  { replicas: 0 }
+queryScheduler: { replicas: 0 }
+distributor:    { replicas: 0 }
+compactor:      { replicas: 0 }
+indexGateway:   { replicas: 0 }
+bloomPlanner:   { replicas: 0 }
+bloomBuilder:   { replicas: 0 }
+bloomGateway:   { replicas: 0 }
+
+# 메모리 절약
+chunksCache:  { enabled: false }
+resultsCache: { enabled: false }
+lokiCanary:   { enabled: false }
+test:         { enabled: false }
