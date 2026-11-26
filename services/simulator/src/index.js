@@ -39,7 +39,9 @@ function log(direction, topic, payload) {
 const view = (d) => ({
   key: `${d.homeId}/${d.deviceId}`, homeId: d.homeId, deviceId: d.deviceId, type: d.type, typeLabel: TYPE_LABELS[d.type],
   name: d.name, location: d.location, power: d.power, state: d.state, connected: d.connected,
-  lastCommandAt: d.lastCommandAt, call: d.call ?? null,
+  lastCommandAt: d.lastCommandAt,
+  // 타이머 객체(call.timer)는 JSON으로 바꿀 수 없으므로 화면에 필요한 값만 보낸다
+  call: d.call ? { callId: d.call.callId, floor: d.call.floor } : null,
 });
 
 async function publish(topic, payload, opts) {
