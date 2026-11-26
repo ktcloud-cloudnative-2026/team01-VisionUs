@@ -45,11 +45,15 @@
 
 | 조건 | 받는 사람 | 대응 문서(런북) |
 |------|-----------|-----------------|
-| 에러율 5%가 5분 넘음 | 관측 영역 담당 | `runbooks/high-error-rate.md` (작성 예정) |
-| p95 응답 시간 1초가 5분 넘음 | 관측 영역 담당 | `runbooks/slow-response.md` (작성 예정) |
-| Pod 재시작 5분 내 3회 이상 | 관측 영역 담당 | `runbooks/pod-restart.md` (작성 예정) |
-| 기기 제어 실패율 10%가 5분 넘음 | Device Service 담당 | `runbooks/device-control-failure.md` (작성 예정) |
-| MQTT Broker 연결 클라이언트 0 (2분 이상) | 관측 영역 담당 | `runbooks/mqtt-disconnected.md` (작성 예정) |
+| Pod가 5분 넘게 Ready 아님 | 관측 영역 담당 | [runbook.md](runbook.md) · HomeIotPodNotReady |
+| 에러율 5%가 5분 넘음 | 관측 영역 담당 | [runbook.md](runbook.md) · HomeIotHighErrorRate |
+| p95 응답 시간 1초가 5분 넘음 | 관측 영역 담당 | [runbook.md](runbook.md) · HomeIotSlowResponse |
+| Pod 재시작 5분 내 3회 이상 | 관측 영역 담당 | [runbook.md](runbook.md) · HomeIotPodRestart |
+| 기기 제어 실패율 10%가 5분 넘음 | Device Service 담당 | [runbook.md](runbook.md) · HomeIotControlFailure |
+| MQTT Broker 연결 클라이언트 0 (2분 이상) — exporter 자신이 1로 잡혀서 Grafana 기준은 `broker_clients_connected < 2` | 관측 영역 담당 | [runbook.md](runbook.md) · HomeIotMqttDisconnected |
+
+- 경보는 Grafana Alerting(dev · prod 각각)에서 보내고, 디스코드 dev `#모니터링-알림` · prod `#모니터링-알림-prod` 로 옵니다
+- 로그로 원인을 찾은 기록: [log-case.md](log-case.md)
 
 ## 5. 코드에 처음부터 넣을 것
 
