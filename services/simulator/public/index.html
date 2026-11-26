@@ -5,153 +5,405 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>가전 기기 시뮬레이터 · Home IoT</title>
 <style>
-  :root { --bg:#f5f6f8; --card:#fff; --line:#e3e6ea; --text:#1d2330; --muted:#6b7380; --ok:#1f9d55; --bad:#d64545; --accent:#2f6fed; }
+  /* 글꼴: public/fonts/NotoSansKR-VF-distilled.woff2 (가변 글꼴 1개로 300~700 모두 사용). 파일이 없으면 시스템 글꼴로 표시 */
+  @font-face { font-family:'Noto Sans KR'; src:url(fonts/NotoSansKR-VF-distilled.woff2) format('woff2'); font-weight:100 900; font-display:swap; }
+
+  :root {
+    --accent:#5B4BA8; --accent-dark:#3E3180; --text:#3A2F76; --muted:#5F5986; --label:#4B3D9A;
+    --panel:rgba(241,238,251,.95); --panel-head:#E6E2F4; --line:#CCC5E6; --soft:#F7F6FC; --soft-shadow:#C7C0E0;
+    --ok:#2F9E6B; --bad:#C23B57; --off:#9A94B8;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; background:var(--bg); color:var(--text); }
-  header { display:flex; align-items:center; justify-content:space-between; padding:16px 24px; background:var(--card); border-bottom:1px solid var(--line); }
-  h1 { font-size:18px; margin:0; }
-  .badge { font-size:13px; padding:4px 10px; border-radius:999px; background:#fde8e8; color:var(--bad); }
-  .badge.on { background:#e3f6ea; color:var(--ok); }
-  main { padding:20px 24px; max-width:1200px; margin:0 auto; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:14px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
-  .card.off { opacity:.55; }
-  .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .title { font-weight:600; }
-  .muted { color:var(--muted); font-size:13px; }
-  .state { margin:10px 0; font-size:15px; }
-  button { font:inherit; font-size:13px; border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 10px; cursor:pointer; }
-  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
-  .editor { margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); display:none; }
-  .editor.open { display:block; }
-  .editor label { display:flex; justify-content:space-between; align-items:center; margin:4px 0; font-size:13px; }
-  .editor input, .editor select { width:120px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; }
-  .empty { padding:40px; text-align:center; color:var(--muted); background:var(--card); border:1px dashed var(--line); border-radius:12px; }
-  h2 { font-size:15px; margin:24px 0 8px; }
-  #log { background:#111827; color:#d1d5db; border-radius:12px; padding:12px; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; height:260px; overflow:auto; }
-  #log .in { color:#93c5fd; } #log .out { color:#86efac; }
+  html { min-height:100%; background:linear-gradient(160deg,#3C97D3 0%,#5A5CC9 42%,#8B3EC0 100%); }
+  body { margin:0; font-family:'Noto Sans KR', system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif; color:var(--text); }
+  h1, p { margin:0; }
+  [hidden] { display:none !important; }
+  .wrap { max-width:1320px; margin:0 auto; padding:32px 24px 64px; display:flex; flex-direction:column; gap:28px; }
+  .panel { background:var(--panel); border-radius:16px; box-shadow:0 10px 24px rgba(36,18,94,.28); overflow:hidden; }
+  .top { display:flex; flex-wrap:wrap; align-items:center; gap:16px; padding:16px 20px; }
+  .top h1 { font-size:22px; font-weight:700; }
+  .col { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .grow { flex:1 1 240px; }
+  .cap { font-size:13px; color:var(--muted); line-height:1.5; }
+  .logo { width:48px; height:48px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; flex:none; }
+  .logo.lg { width:56px; height:56px; }
+  .pill { display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:10px; background:var(--soft); box-shadow:0 2px 0 #C9C2E3; font-size:13px; font-weight:500; white-space:nowrap; }
+  .btn-soft { display:inline-flex; align-items:center; gap:8px; height:44px; padding:0 18px; border:none; border-radius:10px; background:var(--soft); box-shadow:0 3px 0 var(--soft-shadow); color:var(--label); font-family:inherit; font-size:13px; font-weight:700; text-decoration:none; cursor:pointer; }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; flex:none; background:var(--bad); }
+  .dot.ok { background:var(--ok); } .dot.off { background:var(--off); }
+
+  /* 요약 */
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)); gap:20px; }
+  .stat-card { display:flex; align-items:center; gap:16px; padding:18px 20px; box-shadow:0 2px 0 #C9C2E3,0 10px 20px rgba(36,18,94,.22); }
+  .num { font-size:30px; font-weight:500; } .num small { font-size:15px; margin-left:4px; }
+
+  /* 기기 카드 */
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr)); gap:24px; }
+  .card { display:flex; flex-direction:column; }
+  .phead { display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--panel-head); border-bottom:2px solid var(--line); }
+  .chip { padding:6px 16px; border-radius:8px; background:var(--soft); box-shadow:0 2px 0 #C9C2E3; font-size:14px; font-weight:700; color:var(--label); white-space:nowrap; }
+  .pid { flex:1; font-size:12.5px; color:var(--muted); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .stat { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); white-space:nowrap; }
+  .ibtn { width:44px; height:44px; flex:none; border-radius:50%; border:none; background:var(--soft); box-shadow:0 3px 0 var(--soft-shadow); color:var(--accent); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; text-decoration:none; }
+  .body { padding:22px 22px 18px; display:flex; flex-direction:column; gap:18px; flex:1; }
+  .hero { display:flex; align-items:center; gap:20px; }
+  .icirc { width:72px; height:72px; flex:none; border-radius:50%; background:var(--soft); box-shadow:0 4px 0 var(--soft-shadow); color:var(--accent); display:flex; align-items:center; justify-content:center; }
+  .icirc.muted { color:var(--off); }
+  .val { font-size:26px; font-weight:500; }
+  .donut { position:relative; width:112px; height:112px; flex:none; }
+  .donut span { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:500; }
+  .field { display:flex; flex-direction:column; gap:10px; font-size:13px; color:#4E4878; }
+  .field b { color:var(--text); }
+  .rng { display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted); margin-top:-4px; }
+  input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:6px; border-radius:3px; margin:0; cursor:pointer;
+    background:linear-gradient(var(--accent),var(--accent)) 0/var(--v,50%) 100% no-repeat #fff; box-shadow:inset 0 1px 2px rgba(40,20,90,.2); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:#fff; border:5px solid #A49BCF; box-shadow:0 1px 3px rgba(40,20,90,.35); }
+  input[type=range]::-moz-range-thumb { width:12px; height:12px; border-radius:50%; background:#fff; border:5px solid #A49BCF; }
+  input[type=range]:disabled { cursor:default; }
+  .segw { display:flex; flex-direction:column; gap:10px; } .slab { font-size:13px; color:#4E4878; }
+  .seg { display:flex; gap:10px; }
+  .seg button { flex:1; height:44px; border:none; border-radius:10px; background:var(--soft); box-shadow:0 3px 0 var(--soft-shadow); color:var(--label); font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+  .seg button.sel { background:var(--accent); color:#fff; box-shadow:0 3px 0 var(--accent-dark); }
+  .split { display:flex; margin:0 18px 18px; border-radius:10px; overflow:hidden; box-shadow:0 3px 0 var(--soft-shadow); }
+  .split button { flex:1; height:48px; border:none; background:var(--soft); color:var(--label); font-family:inherit; font-size:14px; font-weight:700; letter-spacing:.06em; cursor:pointer; }
+  .split button + button { border-left:2px solid var(--line); }
+  .split button.sel { background:var(--accent); color:#fff; }
+  button:disabled { cursor:default; }
+  .split button:disabled { color:var(--off); background:#EFEDF7; }
+  .split button.sel:disabled { background:#A49BCF; color:#fff; }
+  .seg button:disabled { opacity:.6; }
+  .last { display:flex; align-items:center; gap:6px; margin-top:auto; font-size:12px; color:var(--muted); }
+  .fan { display:flex; align-items:flex-end; gap:8px; height:56px; }
+  .fan span { flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:4px; height:100%; font-size:11.5px; color:var(--muted); }
+  .fan i { display:block; width:100%; background:#fff; border-radius:2px; }
+  .fan span.on i { background:var(--accent); } .fan span.on { color:var(--text); font-weight:700; }
+  .elev { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .floor { font-size:48px; font-weight:300; line-height:1; }
+  .dir { display:inline-flex; align-items:center; gap:4px; font-size:13px; font-weight:500; color:var(--label); }
+  .callbox { display:flex; flex-direction:column; align-items:flex-end; gap:2px; padding:12px 16px; border-radius:12px; background:var(--soft); box-shadow:0 3px 0 var(--soft-shadow); }
+  .callbox strong { font-size:18px; font-weight:500; }
+  .note { display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:12px; background:#fff; box-shadow:inset 0 1px 3px rgba(40,20,90,.15); font-size:14px; color:var(--accent); }
+  .note span { color:var(--text); }
+  .offline .body > * { opacity:.5; } .offline .body .last { opacity:1; }
+  .empty { display:flex; flex-direction:column; align-items:center; gap:10px; padding:56px 24px; text-align:center; color:var(--off); }
+  .empty strong { color:var(--text); font-size:18px; }
+
+  /* 이벤트 로그 */
+  .ptitle { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:14px 20px; background:var(--panel-head); border-bottom:2px solid var(--line); font-size:14px; font-weight:700; letter-spacing:.06em; color:var(--label); }
+  .legend { display:inline-flex; align-items:center; gap:8px; margin-left:auto; font-size:12.5px; font-weight:400; letter-spacing:0; color:var(--muted); }
+  .badge { display:inline-flex; justify-content:center; padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700; white-space:nowrap; }
+  .badge.out { background:#fff; color:var(--label); box-shadow:0 2px 0 #C9C2E3; } .badge.in { background:var(--accent); color:#fff; }
+  .scroll { overflow-x:auto; }
+  .log { width:100%; min-width:900px; border-collapse:collapse; font-size:14px; }
+  .log th { text-align:left; padding:14px 16px; font-size:12px; letter-spacing:.04em; color:#4E4878; }
+  .log td { padding:12px 16px; border-top:1px solid #D9D3EE; vertical-align:top; }
+  .log td:first-child, .log th:first-child { padding-left:20px; }
+  .log .t { color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:13px; overflow-wrap:anywhere; }
+  .pl { color:#4E4878; }
+  .log-empty { padding:28px 20px; font-size:14px; color:var(--muted); }
+
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); max-width:90vw; padding:12px 20px; border-radius:10px; background:var(--text); color:#fff; font-size:14px; box-shadow:0 8px 20px rgba(0,0,0,.25); }
 </style>
 </head>
 <body>
-<header>
-  <h1>가전 기기 시뮬레이터</h1>
-  <span id="mqtt" class="badge">MQTT 연결 안 됨</span>
-</header>
-<main>
-  <p class="muted">사용자 화면에서 기기를 등록하면 여기에 가상 기기가 생깁니다. 명령을 받으면 상태를 바꿔 발행하고, 상태 변경으로 기기를 손으로 조작한 경우를 재현할 수 있습니다.</p>
-  <div id="devices" class="grid"></div>
-  <h2>이벤트 로그</h2>
-  <div id="log"></div>
-</main>
+
+<!-- 화면 1: 대시보드 -->
+<div class="wrap" id="view-dashboard">
+  <header class="panel top">
+    <div class="logo"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg></div>
+    <div class="col grow">
+      <h1>가전 기기 시뮬레이터</h1>
+      <p class="cap">사용자 화면에서 기기를 등록하면 가상 기기가 생기고, 명령을 받으면 상태를 바꿔 발행합니다. 여기서 바꾸는 값은 기기를 손으로 조작한 경우로 발행됩니다.</p>
+    </div>
+    <span class="pill" data-mqtt><span class="dot"></span><span>MQTT 연결 안 됨</span></span>
+    <a class="btn-soft" href="#log"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>이벤트 로그</a>
+  </header>
+  <section class="stats" id="stats" aria-label="요약"></section>
+  <section class="grid" id="devices" aria-label="기기 목록"></section>
+</div>
+
+<!-- 화면 2: 이벤트 로그 -->
+<div class="wrap" id="view-log" hidden>
+  <header class="panel top">
+    <a class="ibtn" href="#" aria-label="대시보드로 돌아가기"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></a>
+    <div class="col grow">
+      <h1>이벤트 로그</h1>
+      <span class="cap">시뮬레이터가 발행·수신한 MQTT 메시지 · 최근 메시지가 위 · 최대 200건</span>
+    </div>
+    <span class="pill" data-mqtt><span class="dot"></span><span>MQTT 연결 안 됨</span></span>
+  </header>
+  <section class="panel">
+    <div class="ptitle">메시지 <span id="log-count"></span>
+      <span class="legend"><span class="badge out">발행</span> 기기 → 백엔드 <span class="badge in">수신</span> 백엔드 → 기기</span>
+    </div>
+    <div class="scroll" id="log"></div>
+  </section>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
 <script>
 const API = '/simulator/api';
-const devices = new Map();
+const ORDER = ['light', 'aircon', 'heater', 'purifier', 'curtain', 'elevator'];
+const MODE = { cool: '냉방', dry: '제습', fan: '송풍' };
+const FAN = { low: '약', mid: '중', high: '강', auto: '자동' };
+const MAX_LOG = 200;
 
-function fmtState(d) {
-  const s = d.state || {};
-  const p = d.power === 'on' ? '켜짐' : d.power === 'off' ? '꺼짐' : null;
-  switch (d.type) {
-    case 'light': return `${p} · 밝기 ${s.brightness}%`;
-    case 'aircon': return `${p} · ${s.temperature}℃ · ${({cool:'냉방',dry:'제습',fan:'송풍'})[s.mode] || s.mode}`;
-    case 'heater': return `${p} · ${s.temperature}℃`;
-    case 'purifier': return `${p} · 풍량 ${({low:'약',mid:'중',high:'강',auto:'자동'})[s.fanSpeed] || s.fanSpeed}`;
-    case 'curtain': return s.position === 0 ? '닫힘' : `열림 ${s.position}%`;
-    case 'elevator': {
-      const st = ({idle:'호출 대기', arriving:`${s.targetFloor}층으로 이동 중`, arrived:'도착'})[s.callStatus] || s.callStatus;
-      return `${s.currentFloor}층 · ${st}`;
-    }
-    default: return JSON.stringify(s);
-  }
-}
-const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const time = (iso) => iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour12:false }) : '-';
+const devices = new Map();   // key = homeId/deviceId
+let logs = [];               // 최신이 앞
+let holdKey = null;          // 슬라이더를 끄는 중인 카드는 다시 그리지 않음
 
-function editorFields(d) {
-  let html = '';
-  if (d.power !== null) html += `<label>전원 <select name="power"><option value="on" ${d.power==='on'?'selected':''}>켜짐</option><option value="off" ${d.power==='off'?'selected':''}>꺼짐</option></select></label>`;
-  for (const [k, v] of Object.entries(d.state || {})) {
-    if (d.type === 'elevator' && k !== 'currentFloor') continue;
-    html += `<label>${esc(k)} <input name="s.${esc(k)}" value="${esc(v)}" data-num="${typeof v === 'number'}"></label>`;
-  }
-  return html + `<div class="actions"><button class="primary" data-act="apply">적용 (state 발행)</button></div>`;
-}
+// ---------- 공통 ----------
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pad = (n) => String(n).padStart(2, '0');
+const time = (iso) => { if (!iso) return '-'; const t = new Date(iso); return `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`; };
 
-function render() {
-  const el = document.getElementById('devices');
-  if (!devices.size) { el.innerHTML = '<div class="empty">등록된 기기가 없습니다. 사용자 화면의 “기기 등록”에서 기기를 추가하세요.</div>'; return; }
-  const open = new Set([...document.querySelectorAll('.editor.open')].map((e) => e.dataset.key));
-  el.innerHTML = [...devices.values()].sort((a, b) => a.key.localeCompare(b.key)).map((d) => `
-    <div class="card ${d.connected ? '' : 'off'}" data-key="${esc(d.key)}">
-      <div class="row"><span class="title">${esc(d.typeLabel)} · ${esc(d.name)}</span><span class="muted">home ${esc(d.homeId)}</span></div>
-      <div class="muted">${esc(d.deviceId)}${d.location ? ' · ' + esc(d.location) : ''}</div>
-      <div class="state">현재 상태: <b>${esc(fmtState(d))}</b></div>
-      <div class="muted">마지막 명령: ${time(d.lastCommandAt)}</div>
-      <div class="actions">
-        <button data-act="edit">상태 변경</button>
-        ${d.type === 'elevator' ? `<button data-act="arrive" ${d.call ? '' : 'disabled'}>도착 처리</button>` : ''}
-        <button data-act="conn">${d.connected ? '연결 끊기' : '다시 연결'}</button>
-      </div>
-      <div class="editor ${open.has(d.key) ? 'open' : ''}" data-key="${esc(d.key)}">${editorFields(d)}</div>
-    </div>`).join('');
-}
+const ICONS = {
+  light: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>',
+  aircon: '<path d="M12 2v20M4 7l16 10M4 17L20 7"/>',
+  heater: '<path d="M12 22a7 7 0 0 0 7-7c0-4-3-6-4-9-1.5 2-2 3.5-2 5-1.5-1-2.5-3-2.5-5C7 8 5 11 5 15a7 7 0 0 0 7 7z"/>',
+  purifier: '<path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 12h16a3 3 0 1 1-3 3"/><path d="M3 16h7"/>',
+  curtain: '<path d="M3 3h18"/><path d="M5 3v18c2-4 3-9 3-18"/><path d="M19 3v18c-2-4-3-9-3-18"/>',
+  elevator: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 9l3-3 3 3M9 15l3 3 3-3"/>',
+  chip: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6v6H9z"/>',
+  power: '<path d="M12 3v9"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/>',
+  plug: '<path d="M9 2v6M15 2v6"/><path d="M6 8h12v4a6 6 0 0 1-12 0z"/><path d="M12 18v4"/>',
+  unplug: '<path d="M9 2v6M15 2v6"/><path d="M6 8h12v4a6 6 0 0 1-12 0z"/><path d="M12 18v4"/><path d="M3 3l18 18"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  up: '<path d="M6 15l6-6 6 6"/>',
+  down: '<path d="M6 9l6 6 6-6"/>',
+};
+const icon = (name, size = 24, sw = 1.8) =>
+  `<svg aria-hidden="true" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
 
-function addLog(e) {
-  const box = document.getElementById('log');
-  const div = document.createElement('div');
-  div.className = e.direction;
-  div.textContent = `[${time(e.at)}] ${e.direction === 'in' ? '수신' : '발행'} ${e.topic} ${JSON.stringify(e.payload)}`;
-  box.prepend(div);
-  while (box.childNodes.length > 200) box.lastChild.remove();
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { t.hidden = true; }, 3000);
 }
 
 async function post(path, body) {
-  const res = await fetch(API + path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {}) });
-  const json = await res.json();
-  if (!json.success) alert(json.error?.message || '실패');
+  try {
+    const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    const json = await res.json();
+    if (!json.success) toast(json.error?.message || '요청이 실패했습니다.');
+  } catch (e) {
+    toast('시뮬레이터 서버에 연결할 수 없습니다.');
+  }
 }
 
-document.getElementById('devices').addEventListener('click', async (ev) => {
-  const btn = ev.target.closest('button'); if (!btn) return;
-  const card = btn.closest('.card'); const d = devices.get(card.dataset.key);
-  const path = `/devices/${encodeURIComponent(d.homeId)}/${encodeURIComponent(d.deviceId)}`;
-  if (btn.dataset.act === 'edit') card.querySelector('.editor').classList.toggle('open');
-  if (btn.dataset.act === 'arrive') await post(path + '/arrive');
-  if (btn.dataset.act === 'conn') await post(path + '/connection', { connected: !d.connected });
-  if (btn.dataset.act === 'apply') {
-    const body = { state: {} };
-    card.querySelectorAll('.editor select, .editor input').forEach((i) => {
-      if (i.name === 'power') body.power = i.value;
-      else if (i.name.startsWith('s.')) body.state[i.name.slice(2)] = i.dataset.num === 'true' ? Number(i.value) : i.value;
-    });
-    await post(path + '/state', body);
-    card.querySelector('.editor').classList.remove('open');
+// ---------- 카드 조각 ----------
+const hero = (name, cap, val, muted) =>
+  `<div class="hero"><div class="icirc${muted ? ' muted' : ''}">${icon(name, 34)}</div><div class="col"><span class="cap">${esc(cap)}</span><strong class="val">${esc(val)}</strong></div></div>`;
+
+function range(key, label, v, lo, hi, unit, dis) {
+  const pct = Math.round(((v - lo) / (hi - lo)) * 100);
+  return `<label class="field"><span>${esc(label)} · <b>${esc(v)}${unit}</b></span>
+    <input type="range" min="${lo}" max="${hi}" value="${esc(v)}" data-k="${key}" data-unit="${unit}" style="--v:${pct}%"${dis}>
+    <span class="rng"><span>${lo}${unit}</span><span>${hi}${unit}</span></span></label>`;
+}
+
+function seg(key, label, opts, cur, dis) {
+  const btns = opts.map(([v, t]) => `<button class="${v === cur ? 'sel' : ''}" data-act="state" data-k="${key}" data-v="${v}"${dis}>${t}</button>`).join('');
+  return `<div class="segw"><span class="slab">${esc(label)}</span><div class="seg" role="group" aria-label="${esc(label)}">${btns}</div></div>`;
+}
+
+function donut(v, lo, hi, muted) {
+  const c = 289, pct = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+  return `<div class="donut"><svg role="img" aria-label="설정 온도 ${esc(v)}도" width="112" height="112" viewBox="0 0 112 112"><circle cx="56" cy="56" r="46" fill="none" stroke="#fff" stroke-width="12"/><circle cx="56" cy="56" r="46" fill="none" stroke="${muted ? '#A49BCF' : '#5B4BA8'}" stroke-width="12" stroke-dasharray="${Math.round(c * pct)} ${c}" transform="rotate(-90 56 56)"/></svg><span>${esc(v)}°</span></div>`;
+}
+
+const powerSplit = (d, dis) =>
+  `<div class="split"><button class="${d.power === 'on' ? 'sel' : ''}" data-act="power" data-v="on"${dis}>켜기</button><button class="${d.power === 'off' ? 'sel' : ''}" data-act="power" data-v="off"${dis}>끄기</button></div>`;
+
+function cardHtml(d) {
+  const off = !d.connected;
+  const dis = off ? ' disabled' : '';
+  const on = d.power === 'on';
+  const s = d.state || {};
+  let body = '', foot = '';
+
+  switch (d.type) {
+    case 'light':
+      body = hero('light', '현재 상태', `${on ? '켜짐' : '꺼짐'} · ${s.brightness}%`, !on) + range('brightness', '밝기', s.brightness, 0, 100, '%', dis);
+      foot = powerSplit(d, dis);
+      break;
+    case 'aircon':
+      body = `<div class="hero">${donut(s.temperature, 16, 30, !on)}<div class="col"><span class="cap">현재 상태</span><strong class="val">${on ? '켜짐' : '꺼짐'} · ${esc(MODE[s.mode] || s.mode)}</strong><span class="cap">설정 온도 ${esc(s.temperature)}℃ (16~30)</span></div></div>`
+        + seg('mode', '운전 모드', [['cool', '냉방'], ['dry', '제습'], ['fan', '송풍']], s.mode, dis)
+        + range('temperature', '설정 온도', s.temperature, 16, 30, '℃', dis);
+      foot = powerSplit(d, dis);
+      break;
+    case 'heater':
+      body = hero('heater', '현재 상태', `${on ? '켜짐' : '꺼짐'} · ${s.temperature}℃`, !on) + range('temperature', '설정 온도', s.temperature, 15, 30, '℃', dis);
+      foot = powerSplit(d, dis);
+      break;
+    case 'purifier': {
+      const lv = { low: 1, mid: 2, high: 3 }[s.fanSpeed] || 0;
+      const bars = [['약', 30], ['중', 60], ['강', 100]].map(([t, h], i) => `<span class="${i < lv ? 'on' : ''}"><i style="height:${h}%"></i>${t}</span>`).join('');
+      body = hero('purifier', '현재 상태', `${on ? '켜짐' : '꺼짐'} · 풍량 ${FAN[s.fanSpeed] || s.fanSpeed}`, !on)
+        + `<div class="fan" role="img" aria-label="풍량 ${esc(FAN[s.fanSpeed] || s.fanSpeed)}">${bars}</div>`
+        + seg('fanSpeed', '풍량', [['low', '약'], ['mid', '중'], ['high', '강'], ['auto', '자동']], s.fanSpeed, dis);
+      foot = powerSplit(d, dis);
+      break;
+    }
+    case 'curtain':
+      body = hero('curtain', '열림 정도', s.position === 0 ? '닫힘' : `${s.position}%`, s.position === 0) + range('position', '위치', s.position, 0, 100, '%', dis);
+      foot = `<div class="split"><button class="${s.position === 100 ? 'sel' : ''}" data-act="state" data-k="position" data-v="100" data-num="1"${dis}>열기</button><button class="${s.position === 0 ? 'sel' : ''}" data-act="state" data-k="position" data-v="0" data-num="1"${dis}>닫기</button></div>`;
+      break;
+    case 'elevator': {
+      const cs = s.callStatus;
+      const txt = cs === 'arriving' ? `${s.targetFloor}층으로 이동 중` : cs === 'arrived' ? '도착' : '호출 대기';
+      const dir = cs === 'arriving' ? icon(s.targetFloor > s.currentFloor ? 'up' : 'down', 16, 2.6) : '';
+      const note = cs === 'arriving' ? '한 층씩 이동합니다. 도착 처리를 누르면 바로 도착합니다'
+        : cs === 'arrived' ? '잠시 뒤 호출 대기로 돌아갑니다' : '사용자 화면에서 호출하면 이동을 시작합니다';
+      const call = d.call ? `<div class="callbox"><span class="cap">호출</span><strong>${esc(d.call.callId)}</strong><span class="cap">목표 ${esc(d.call.floor)}층</span></div>` : '';
+      body = `<div class="elev"><div class="col"><span class="cap">현재 층</span><strong class="floor">${esc(s.currentFloor)}F</strong><span class="dir">${dir}${esc(txt)}</span></div>${call}</div>`
+        + `<div class="note">${icon('clock', 20, 2)}<span>${note}</span></div>`;
+      foot = `<div class="split"><button class="${d.call ? 'sel' : ''}" data-act="arrive"${d.call && !off ? '' : ' disabled'}>도착 처리</button></div>`;
+      break;
+    }
+    default:
+      body = `<code>${esc(JSON.stringify(s))}</code>`;
   }
-});
+
+  const st = off ? '<span class="stat"><span class="dot off"></span>오프라인</span>' : '<span class="stat"><span class="dot ok"></span>온라인</span>';
+  const conn = off
+    ? `<button class="ibtn" data-act="conn" aria-label="다시 연결" title="다시 연결">${icon('plug', 18, 2.2)}</button>`
+    : `<button class="ibtn" data-act="conn" aria-label="연결 끊기" title="연결 끊기">${icon('unplug', 18, 2.2)}</button>`;
+  const where = [d.name, d.location].filter(Boolean).join(' · ');
+
+  return `<article class="panel card${off ? ' offline' : ''}" data-key="${esc(d.key)}">
+    <div class="phead"><span class="chip">${esc(d.typeLabel)}</span><span class="pid" title="home ${esc(d.homeId)}">${esc(where)}</span>${st}${conn}</div>
+    <div class="body">${body}<p class="last">${icon('clock', 14, 2)}${esc(d.deviceId)} · 마지막 명령 ${time(d.lastCommandAt)}</p></div>
+    ${foot}</article>`;
+}
+
+// ---------- 그리기 ----------
+function sorted() {
+  return [...devices.values()].sort((a, b) => (ORDER.indexOf(a.type) - ORDER.indexOf(b.type)) || a.key.localeCompare(b.key));
+}
+
+function renderStats() {
+  const list = [...devices.values()];
+  const elev = list.find((d) => d.type === 'elevator');
+  let elevTxt = '-', elevSub = '';
+  if (elev) {
+    elevTxt = `${elev.state.currentFloor}F`;
+    if (elev.state.callStatus === 'arriving') elevSub = ` → ${elev.state.targetFloor}F`;
+  }
+  const box = (name, cap, num, unit) =>
+    `<div class="panel stat-card"><div class="logo lg">${icon(name, 26, 2)}</div><div class="col"><span class="cap">${cap}</span><strong class="num">${esc(num)}<small>${esc(unit)}</small></strong></div></div>`;
+  document.getElementById('stats').innerHTML =
+    box('chip', '가상 기기', list.length, '대')
+    + box('power', '켜진 기기', list.filter((d) => d.power === 'on').length, '대')
+    + box('unplug', '연결 끊김', list.filter((d) => !d.connected).length, '대')
+    + box('elevator', '엘리베이터', elevTxt, elevSub);
+}
+
+function renderDevices() {
+  const el = document.getElementById('devices');
+  if (!devices.size) {
+    el.innerHTML = `<div class="panel empty" style="grid-column:1/-1">${icon('chip', 40)}<strong>등록된 기기가 없습니다</strong><span class="cap">사용자 화면의 “기기 등록”에서 기기를 추가하세요.</span></div>`;
+  } else {
+    el.innerHTML = sorted().map(cardHtml).join('');
+  }
+  renderStats();
+}
+
+function renderCard(d) {
+  if (holdKey === d.key) return; // 슬라이더 조작 중
+  const old = [...document.querySelectorAll('.card')].find((c) => c.dataset.key === d.key);
+  if (!old) { renderDevices(); return; }
+  const tmp = document.createElement('div');
+  tmp.innerHTML = cardHtml(d);
+  old.replaceWith(tmp.firstElementChild);
+  renderStats();
+}
+
+function renderLog() {
+  const box = document.getElementById('log');
+  document.getElementById('log-count').textContent = `${logs.length}건`;
+  if (!logs.length) { box.innerHTML = '<p class="log-empty">아직 이벤트가 없습니다. MQTT에 연결되면 발행·수신 메시지가 여기에 쌓입니다.</p>'; return; }
+  const rows = logs.map((e) => `<tr><td class="t">${time(e.at)}</td><td>${e.direction === 'in' ? '<span class="badge in">수신</span>' : '<span class="badge out">발행</span>'}</td><td><code>${esc(e.topic)}</code></td><td><code class="pl">${esc(JSON.stringify(e.payload))}</code></td></tr>`).join('');
+  box.innerHTML = `<table class="log"><thead><tr><th>시각</th><th>방향</th><th>토픽</th><th>페이로드</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
 
 function setMqtt(connected) {
-  const b = document.getElementById('mqtt');
-  b.textContent = connected ? 'MQTT 연결됨' : 'MQTT 연결 안 됨';
-  b.classList.toggle('on', connected);
+  document.querySelectorAll('[data-mqtt]').forEach((p) => {
+    p.querySelector('.dot').classList.toggle('ok', connected);
+    p.lastElementChild.textContent = connected ? 'MQTT 연결됨' : 'MQTT 연결 안 됨';
+  });
 }
 
+function showView() {
+  const isLog = location.hash === '#log';
+  document.getElementById('view-dashboard').hidden = isLog;
+  document.getElementById('view-log').hidden = !isLog;
+  if (isLog) renderLog();
+  window.scrollTo(0, 0);
+}
+
+// ---------- 조작 ----------
+const pathOf = (d) => `/devices/${encodeURIComponent(d.homeId)}/${encodeURIComponent(d.deviceId)}`;
+const deviceOf = (el) => devices.get(el.closest('.card')?.dataset.key);
+
+document.getElementById('devices').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button[data-act]');
+  if (!btn || btn.disabled) return;
+  const d = deviceOf(btn); if (!d) return;
+  const act = btn.dataset.act;
+  if (act === 'power') await post(pathOf(d) + '/state', { power: btn.dataset.v });
+  if (act === 'state') {
+    const v = btn.dataset.num ? Number(btn.dataset.v) : btn.dataset.v;
+    await post(pathOf(d) + '/state', { state: { [btn.dataset.k]: v } });
+  }
+  if (act === 'conn') await post(pathOf(d) + '/connection', { connected: !d.connected });
+  if (act === 'arrive') await post(pathOf(d) + '/arrive');
+});
+
+// 슬라이더: 끄는 동안은 글자만 바꾸고, 손을 떼면(change) 발행
+document.getElementById('devices').addEventListener('input', (ev) => {
+  const r = ev.target;
+  if (r.type !== 'range') return;
+  holdKey = r.closest('.card').dataset.key;
+  r.style.setProperty('--v', ((r.value - r.min) / (r.max - r.min)) * 100 + '%');
+  r.closest('.field').querySelector('b').textContent = r.value + r.dataset.unit;
+});
+document.getElementById('devices').addEventListener('change', async (ev) => {
+  const r = ev.target;
+  if (r.type !== 'range') return;
+  const d = deviceOf(r);
+  holdKey = null;
+  if (d) await post(pathOf(d) + '/state', { state: { [r.dataset.k]: Number(r.value) } });
+});
+
+window.addEventListener('hashchange', showView);
+
+// ---------- 시작 ----------
 async function init() {
-  const json = await (await fetch(API + '/devices')).json();
-  setMqtt(json.data.mqttConnected);
-  json.data.devices.forEach((d) => devices.set(d.key, d));
-  json.data.log.slice().reverse().forEach(addLog);
-  render();
+  try {
+    const json = await (await fetch(API + '/devices')).json();
+    setMqtt(json.data.mqttConnected);
+    json.data.devices.forEach((d) => devices.set(d.key, d));
+    logs = json.data.log.slice(0, MAX_LOG);
+  } catch (e) {
+    toast('시뮬레이터 서버에 연결할 수 없습니다.');
+  }
+  renderDevices();
+  showView();
+
   const es = new EventSource(API + '/stream');
   es.addEventListener('mqtt', (e) => setMqtt(JSON.parse(e.data).connected));
-  es.addEventListener('device', (e) => {
-    const d = JSON.parse(e.data); devices.set(d.key, d);
-    // 편집 중인 카드는 입력값을 지우지 않도록 상태 글자만 갱신
-    const card = [...document.querySelectorAll('.card')].find((c) => c.dataset.key === d.key);
-    if (card && document.querySelector('.editor.open')) card.querySelector('.state b').textContent = fmtState(d);
-    else render();
+  es.addEventListener('device', (e) => { const d = JSON.parse(e.data); devices.set(d.key, d); renderCard(d); });
+  es.addEventListener('removed', (e) => { devices.delete(JSON.parse(e.data).key); renderDevices(); });
+  es.addEventListener('log', (e) => {
+    logs.unshift(JSON.parse(e.data));
+    if (logs.length > MAX_LOG) logs.length = MAX_LOG;
+    if (location.hash === '#log') renderLog();
   });
-  es.addEventListener('removed', (e) => { devices.delete(JSON.parse(e.data).key); render(); });
-  es.addEventListener('log', (e) => addLog(JSON.parse(e.data)));
 }
 init();
 </script>
