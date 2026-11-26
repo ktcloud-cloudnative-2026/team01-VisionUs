@@ -21,6 +21,11 @@ spec:
           - $values/deploy/monitoring/values/kube-prometheus-stack.yaml
         valuesObject:                  # prod 클러스터 전용 값: 브라우저 접속 주소 고정 (MetalLB prod 대역)
           grafana:
+            grafana.ini:
+              auth:
+                login_cookie_name: grafana_session_prod    # dev와 로그인 쿠키 분리 (둘 다 열어도 로그아웃 안 됨)
+              users:
+                default_theme: light                       # prod는 밝은 화면 → dev(어두운 화면)와 바로 구분
             service:
               annotations:
                 metallb.io/loadBalancerIPs: 10.10.21.220   # Grafana

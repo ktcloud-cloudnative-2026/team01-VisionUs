@@ -273,13 +273,14 @@ kubectl -n home-iot logs deploy/mosquitto -c exporter --tail=5   # "Connected to
 
 Grafana와 Prometheus는 MetalLB가 **고정 IP**를 붙여 둡니다. 주소는 `deploy/monitoring/monitoring-dev.yaml` · `monitoring-prod.yaml` 의 `metallb.io/loadBalancerIPs` 에서 정합니다.
 
-| | 클러스터 안 주소 (dev) | 클러스터 안 주소 (prod) | 내 PC 브라우저 주소 |
+| | 클러스터 안 주소 (dev) | 클러스터 안 주소 (prod) | 내 PC 브라우저 주소 (dev / prod) |
 |---|---|---|---|
-| Grafana | `http://10.10.21.120` (포트 80) | `http://10.10.21.220` (포트 80) | `http://localhost:13000` |
-| Prometheus | `http://10.10.21.121:9090` | `http://10.10.21.221:9090` | `http://localhost:19090` |
+| Grafana | `http://10.10.21.120` (포트 80) | `http://10.10.21.220` (포트 80) | `http://localhost:13000` / `http://localhost:13001` |
+| Prometheus | `http://10.10.21.121:9090` | `http://10.10.21.221:9090` | `http://localhost:19090` / `http://localhost:19091` |
 
 - 10.10.21.x 주소는 팀 VM끼리만 통하므로, 내 PC에서는 **bastion을 거치는 SSH 터널**로 봅니다
-- 내 PC 쪽 포트는 이미 쓰는 80 · 8080 · 18080 과 겹치지 않게 **13000 · 19090** 을 씁니다
+- 내 PC 쪽 포트는 이미 쓰는 80 · 8080 · 18080 과 겹치지 않게 **dev 13000 · 19090, prod 13001 · 19091** 로 고정합니다 (끝자리 0 = dev, 1 = prod)
+- 포트가 달라서 dev · prod 터널을 동시에 열어도 됩니다. prod Grafana는 로그인 쿠키 이름이 달라 둘 다 로그인해도 서로 로그아웃되지 않고, **밝은 화면(light 테마)** 이라 dev(어두운 화면)와 바로 구분됩니다
 
 **1) 팀 VM에서 먼저 확인** (tN-db 등)
 
@@ -296,8 +297,8 @@ curl -s -o /dev/null -w '%{http_code}\n' http://10.10.21.121:9090/-/ready   # Pr
 # dev 클러스터 보기
 ssh -N -L 13000:10.10.21.120:80 -L 19090:10.10.21.121:9090 <bastion 접속 계정@주소>
 
-# prod 클러스터 보기 (dev 터널을 Ctrl+C로 닫고)
-ssh -N -L 13000:10.10.21.220:80 -L 19090:10.10.21.221:9090 <bastion 접속 계정@주소>
+# prod 클러스터 보기 (dev 터널과 동시에 열어도 됨)
+ssh -N -L 13001:10.10.21.220:80 -L 19091:10.10.21.221:9090 <bastion 접속 계정@주소>
 ```
 
 - `-L 13000:10.10.21.120:80` = 내 PC의 13000번으로 들어온 요청을 bastion이 10.10.21.120:80(Grafana)으로 전달
@@ -306,8 +307,8 @@ ssh -N -L 13000:10.10.21.220:80 -L 19090:10.10.21.221:9090 <bastion 접속 계�
 
 **3) 브라우저 열기**
 
-- Grafana: `http://localhost:13000` → `admin` / 4단계에서 정한 비밀번호
-- Prometheus: `http://localhost:19090` → 상단 **Status → Target health** 에서 아래 3개가 모두 **UP** 이면 수집 정상
+- Grafana: dev `http://localhost:13000` · prod `http://localhost:13001` → `admin` / 4단계에서 정한 비밀번호
+- Prometheus: dev `http://localhost:19090` · prod `http://localhost:19091` → 상단 **Status → Target health** 에서 아래 3개가 모두 **UP** 이면 수집 정상
   - `serviceMonitor/monitoring/home-iot` (서비스 5개)
   - `serviceMonitor/monitoring/home-iot-mqtt` (MQTT 브로커)
   - `podMonitor/monitoring/envoy-gateway-proxy` (Envoy Gateway)
