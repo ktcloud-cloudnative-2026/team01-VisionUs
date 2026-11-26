@@ -43,6 +43,7 @@
   .phead { display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--panel-head); border-bottom:2px solid var(--line); }
   .chip { padding:6px 16px; border-radius:8px; background:var(--soft); box-shadow:0 2px 0 #C9C2E3; font-size:14px; font-weight:700; color:var(--label); white-space:nowrap; }
   .pid { flex:1; font-size:12.5px; color:var(--muted); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pid b { font-size:14px; font-weight:700; color:var(--text); }
   .stat { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); white-space:nowrap; }
   .ibtn { width:44px; height:44px; flex:none; border-radius:50%; border:none; background:var(--soft); box-shadow:0 3px 0 var(--soft-shadow); color:var(--accent); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; text-decoration:none; }
   .body { padding:22px 22px 18px; display:flex; flex-direction:column; gap:18px; flex:1; }
@@ -85,6 +86,31 @@
   .note { display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:12px; background:#fff; box-shadow:inset 0 1px 3px rgba(40,20,90,.15); font-size:14px; color:var(--accent); }
   .note span { color:var(--text); }
   .offline .body > * { opacity:.5; } .offline .body .last { opacity:1; }
+  /* 기기 카드 크기 축소 (기존의 약 70%) */
+  .grid { grid-template-columns:repeat(auto-fit,minmax(min(270px,100%),1fr)); gap:18px; }
+  .card .phead { gap:7px; padding:8px 10px; }
+  .card .chip { padding:4px 11px; font-size:12.5px; }
+  .card .phead { flex-wrap:wrap; row-gap:6px; }
+  .card .phead .stat { margin-left:auto; }
+  .card .pid { order:9; flex:1 0 100%; font-size:11.5px; } .card .pid b { font-size:13px; }
+  .card .stat { font-size:11px; gap:5px; } .card .dot { width:8px; height:8px; }
+  .card .ibtn { width:36px; height:36px; }
+  .card .body { padding:15px 15px 12px; gap:12px; }
+  .card .hero { gap:14px; }
+  .card .icirc { width:50px; height:50px; box-shadow:0 3px 0 var(--soft-shadow); }
+  .card .cap { font-size:11.5px; }
+  .card .val { font-size:18px; }
+  .card .donut { width:78px; height:78px; } .card .donut svg { width:78px; height:78px; } .card .donut span { font-size:18px; }
+  .card .field, .card .slab { font-size:11.5px; gap:7px; } .card .segw { gap:7px; }
+  .card .rng { font-size:10.5px; }
+  .card .seg { gap:7px; } .card .seg button { height:34px; font-size:12px; border-radius:8px; }
+  .card .split { margin:0 12px 12px; border-radius:8px; } .card .split button { height:36px; font-size:12.5px; }
+  .card .fan { height:38px; gap:6px; } .card .fan span { font-size:10.5px; }
+  .card .floor { font-size:34px; }
+  .card .dir { font-size:11.5px; }
+  .card .callbox { padding:8px 11px; border-radius:10px; } .card .callbox strong { font-size:13px; }
+  .card .note { padding:10px 11px; gap:8px; font-size:12px; border-radius:10px; }
+  .card .last { font-size:11px; }
   .empty { display:flex; flex-direction:column; align-items:center; gap:10px; padding:56px 24px; text-align:center; color:var(--off); }
   .empty strong { color:var(--text); font-size:18px; }
 
@@ -93,7 +119,12 @@
   .legend { display:inline-flex; align-items:center; gap:8px; margin-left:auto; font-size:12.5px; font-weight:400; letter-spacing:0; color:var(--muted); }
   .badge { display:inline-flex; justify-content:center; padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700; white-space:nowrap; }
   .badge.out { background:#fff; color:var(--label); box-shadow:0 2px 0 #C9C2E3; } .badge.in { background:var(--accent); color:#fff; }
-  .scroll { overflow-x:auto; }
+  /* 이벤트 로그 화면: 브라우저 스크롤 없이 화면 높이에 맞추고, 로그 목록만 안에서 스크롤 */
+  html.log-mode, html.log-mode body { height:100%; overflow:hidden; }
+  #view-log { height:100vh; height:100dvh; padding-bottom:32px; }
+  #view-log .log-panel { flex:1; min-height:0; display:flex; flex-direction:column; }
+  #view-log .scroll { flex:1; min-height:0; overflow:auto; }
+  .log thead th { position:sticky; top:0; z-index:1; background:#EEEBF8; box-shadow:0 1px 0 #D9D3EE; }
   .log { width:100%; min-width:900px; border-collapse:collapse; font-size:14px; }
   .log th { text-align:left; padding:14px 16px; font-size:12px; letter-spacing:.04em; color:#4E4878; }
   .log td { padding:12px 16px; border-top:1px solid #D9D3EE; vertical-align:top; }
@@ -133,7 +164,7 @@
     </div>
     <span class="pill" data-mqtt><span class="dot"></span><span>MQTT 연결 안 됨</span></span>
   </header>
-  <section class="panel">
+  <section class="panel log-panel">
     <div class="ptitle">메시지 <span id="log-count"></span>
       <span class="legend"><span class="badge out">발행</span> 기기 → 백엔드 <span class="badge in">수신</span> 백엔드 → 기기</span>
     </div>
@@ -196,7 +227,7 @@ async function post(path, body) {
 
 // ---------- 카드 조각 ----------
 const hero = (name, cap, val, muted) =>
-  `<div class="hero"><div class="icirc${muted ? ' muted' : ''}">${icon(name, 34)}</div><div class="col"><span class="cap">${esc(cap)}</span><strong class="val">${esc(val)}</strong></div></div>`;
+  `<div class="hero"><div class="icirc${muted ? ' muted' : ''}">${icon(name, 24)}</div><div class="col"><span class="cap">${esc(cap)}</span><strong class="val">${esc(val)}</strong></div></div>`;
 
 function range(key, label, v, lo, hi, unit, dis) {
   const pct = Math.round(((v - lo) / (hi - lo)) * 100);
@@ -276,8 +307,8 @@ function cardHtml(d) {
   const where = [d.name, d.location].filter(Boolean).join(' · ');
 
   return `<article class="panel card${off ? ' offline' : ''}" data-key="${esc(d.key)}">
-    <div class="phead"><span class="chip">${esc(d.typeLabel)}</span><span class="pid" title="home ${esc(d.homeId)}">${esc(where)}</span>${st}${conn}</div>
-    <div class="body">${body}<p class="last">${icon('clock', 14, 2)}${esc(d.deviceId)} · 마지막 명령 ${time(d.lastCommandAt)}</p></div>
+    <div class="phead"><span class="chip">${esc(d.typeLabel)}</span><span class="pid" title="${esc(d.deviceId)} · home ${esc(d.homeId)}"><b>${esc(d.deviceId)}</b>${where ? ' · ' + esc(where) : ''}</span>${st}${conn}</div>
+    <div class="body">${body}<p class="last">${icon('clock', 14, 2)}마지막 명령 ${time(d.lastCommandAt)}</p></div>
     ${foot}</article>`;
 }
 
@@ -342,6 +373,7 @@ function showView() {
   const isLog = location.hash === '#log';
   document.getElementById('view-dashboard').hidden = isLog;
   document.getElementById('view-log').hidden = !isLog;
+  document.documentElement.classList.toggle('log-mode', isLog);
   if (isLog) renderLog();
   window.scrollTo(0, 0);
 }
