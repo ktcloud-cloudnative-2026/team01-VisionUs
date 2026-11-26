@@ -67,3 +67,5 @@ bash scripts/deploy-history.sh > docs/deploy-history.md
 1. 배포 이력 표에서 돌아갈 태그를 찾습니다. 표는 최근 것이 위에 있으니, 같은 환경·서비스 중 **바로 아래 줄**이 직전 버전입니다.
 2. **문제가 된 배포 PR**(가장 위 줄)을 GitHub에서 **Revert** 하거나, `newTag`를 1번에서 찾은 태그로 바꾸는 PR을 만들어 머지합니다.
 3. Argo CD가 main을 보고 이전 버전으로 맞춥니다.
+
+실제로 해본 기록(걸린 시간 · 캡처 · 주의할 점): [롤백 시연 기록](rollback-demo.md)
