@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '../../lib/api';
+import { BackIcon } from '../../components/Icons';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -42,7 +43,8 @@ export default function SignupPage() {
   const field = (key, label, type, placeholder, auto) => (
     <>
       <label htmlFor={key}>{label}</label>
-      <input id={key} type={type} placeholder={placeholder} value={form[key]} onChange={set(key)} autoComplete={auto} />
+      <input id={key} type={type} placeholder={placeholder} value={form[key]} onChange={set(key)}
+        autoComplete={auto} className={errors[key] ? 'invalid' : ''} />
       {errors[key] && <div className="field-error">{errors[key]}</div>}
     </>
   );
@@ -50,8 +52,12 @@ export default function SignupPage() {
   return (
     <main className="auth-wrap">
       <form className="auth-card" onSubmit={submit} noValidate>
-        <div className="logo">회원가입</div>
-        <p className="sub">계정을 만들고 가전 기기를 연결합니다</p>
+        <div className="titlebar">
+          <Link href="/login" className="icon-btn" aria-label="로그인으로 돌아가기"><BackIcon /></Link>
+          <h1 style={{ margin: 0, fontSize: 17 }}>회원가입</h1>
+          <span />
+        </div>
+        <p className="hint" style={{ textAlign: 'center' }}>계정을 만들고 가전 기기를 연결합니다</p>
         {field('name', '이름', 'text', '이름', 'name')}
         {field('email', '이메일', 'email', 'user@example.com', 'email')}
         {field('password', '비밀번호', 'password', '********', 'new-password')}
@@ -59,7 +65,7 @@ export default function SignupPage() {
         {formError && <div className="form-error">{formError}</div>}
         <div className="stack">
           <button className="primary" type="submit" disabled={busy}>{busy ? '처리 중…' : '가입하기'}</button>
-          <Link href="/login" style={{ textAlign: 'center', fontSize: 14 }}>로그인으로 돌아가기</Link>
+          <Link href="/login" className="text-link">로그인으로 돌아가기</Link>
         </div>
       </form>
     </main>

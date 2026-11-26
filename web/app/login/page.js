@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, tokens } from '../../lib/api';
+import { LogoIcon } from '../../components/Icons';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -43,15 +44,18 @@ export default function LoginPage() {
   return (
     <main className="auth-wrap">
       <form className="auth-card" onSubmit={submit} noValidate>
-        <div className="logo">Home IoT</div>
-        <p className="sub">로그인 후 가전 기기를 제어합니다</p>
+        <div className="logo"><LogoIcon /></div>
+        <h1>Home IoT</h1>
+        <p className="hint">로그인 후 가전 기기를 제어합니다</p>
 
         <label htmlFor="email">이메일</label>
-        <input id="email" type="email" placeholder="user@example.com" value={form.email} onChange={set('email')} autoComplete="email" />
+        <input id="email" type="email" placeholder="user@example.com" value={form.email} onChange={set('email')}
+          autoComplete="email" className={errors.email ? 'invalid' : ''} />
         {errors.email && <div className="field-error">{errors.email}</div>}
 
         <label htmlFor="password">비밀번호</label>
-        <input id="password" type="password" placeholder="********" value={form.password} onChange={set('password')} autoComplete="current-password" />
+        <input id="password" type="password" placeholder="********" value={form.password} onChange={set('password')}
+          autoComplete="current-password" className={errors.password ? 'invalid' : ''} />
         {errors.password && <div className="field-error">{errors.password}</div>}
 
         {formError && <div className="form-error">{formError}</div>}
