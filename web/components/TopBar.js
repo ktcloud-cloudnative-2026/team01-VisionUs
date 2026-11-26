@@ -1,11 +1,17 @@
 'use client';
+/**
+ * 하단 탭 바 (디자인 v8) — 기존 상단 바(TopBar)를 대신한다
+ *  - 기기 현황 / 기기 등록 / 로그아웃
+ *  - onRegister 를 넘기면 "기기 등록"이 그 함수를 부르고,
+ *    없으면 /devices?register=1 로 이동해서 기기 현황 화면이 등록 창을 연다
+ */
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { api, currentUser, tokens, goLogin } from '../lib/api';
+import { usePathname } from 'next/navigation';
+import { api, tokens, goLogin } from '../lib/api';
+import { AddBoxIcon, HomeFillIcon, UserIcon } from './Icons';
 
-export default function TopBar() {
-  const [user, setUser] = useState(null);
-  useEffect(() => setUser(currentUser()), []);
+export default function TopBar({ onRegister }) {
+  const pathname = usePathname();
 
   async function logout() {
     try {
@@ -15,12 +21,14 @@ export default function TopBar() {
   }
 
   return (
-    <header className="topbar">
-      <Link href="/devices" className="brand">Home IoT</Link>
-      <div className="right">
-        <span>{user?.name ?? ''}</span>
-        <button onClick={logout}>로그아웃</button>
+    <nav className="tabbar" aria-label="주 메뉴">
+      <div className="inner">
+        <Link href="/devices" className={pathname?.startsWith('/devices') ? 'on' : ''}><HomeFillIcon />기기 현황</Link>
+        {onRegister
+          ? <button type="button" onClick={onRegister}><AddBoxIcon />기기 등록</button>
+          : <Link href="/devices?register=1"><AddBoxIcon />기기 등록</Link>}
+        <button type="button" onClick={logout}><UserIcon />로그아웃</button>
       </div>
-    </header>
+    </nav>
   );
 }

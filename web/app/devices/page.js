@@ -1,17 +1,19 @@
 'use client';
 /**
- * 기기 현황 (대시보드)
+ * 기기 현황 (대시보드) — 디자인 v8
  *  - GET /devices 를 3초마다 조회 (상태 갱신 방식: 주기적 조회)
- *  - 조명·에어컨·난방기기·공기청정기: 카드 → 상세 화면에서 제어
+ *  - 위쪽 요약 카드: 켜진 기기 · 전체 · 온라인 · 오프라인 대수 (목록에서 계산)
+ *  - 조명·에어컨·난방기기·공기청정기: 카드를 누르면 상세 화면에서 제어 (켜진 기기는 블루 아이콘)
  *  - 커튼: 여기서 바로 열기/닫기, 엘리베이터: 여기서 바로 호출
- *  - 기기 등록: "+ 기기 등록" 을 누르면 이 화면 위에 등록 창이 열림 (별도 페이지 없음)
- *      기기 종류는 드롭다운, 기기 ID 는 서버가 <종류>-<사용자ID>-<순번> 으로 자동 생성 (예: light-5-01)
+ *  - 기기 등록: 오른쪽 위 + · 하단 탭 · 등록 카드 → 이 화면 위에 등록 창이 열림 (별도 페이지 없음)
+ *      기기 종류는 아이콘 타일로 선택, 기기 ID 는 서버가 <종류>-<사용자ID>-<순번> 으로 자동 생성 (예: light-5-01)
  */
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import TopBar from '../../components/TopBar';
+import { CloudHomeIcon, DeviceIcon, LogoIcon, PlusIcon, PowerIcon, UnlinkIcon } from '../../components/Icons';
 import { api, sendCommand, tokens, goLogin, currentUser } from '../../lib/api';
-import { summary, typeInfo, TYPES } from '../../lib/devices';
+import { summary, TYPES } from '../../lib/devices';
 
 const POLL_MS = 3000;
 
@@ -23,9 +25,8 @@ function CurtainActions({ device, onDone, onError }) {
   };
   return (
     <div className="actions">
-      <button disabled={busy} onClick={() => run('OPEN')}>열기</button>
-      <button disabled={busy} onClick={() => run('CLOSE')}>닫기</button>
-      <Link href={`/devices/${device.deviceId}`} style={{ marginLeft: 'auto', fontSize: 14 }}>상세 보기 →</Link>
+      <button className="gray" disabled={busy} onClick={() => run('OPEN')}>열기</button>
+      <button className="gray" disabled={busy} onClick={() => run('CLOSE')}>닫기</button>
     </div>
   );
 }
@@ -43,22 +44,44 @@ function ElevatorActions({ device, onDone, onError }) {
   };
   return (
     <div className="actions">
-      <input type="number" value={floor} onChange={(e) => setFloor(e.target.value)} style={{ width: 80 }} aria-label="호출 층" />
-      <span className="meta">층</span>
+      <input type="number" value={floor} onChange={(e) => setFloor(e.target.value)} aria-label="호출 층" />
       <button className="primary" disabled={busy || moving} onClick={call}>호출</button>
     </div>
   );
 }
 
-// ---------------- 기기 등록 창 ----------------
-const S = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(17, 24, 39, .45)', display: 'grid', placeItems: 'center', padding: 16, zIndex: 50 },
-  dialog: { width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', margin: 0 },
-  head: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  close: { border: 0, background: 'transparent', fontSize: 22, padding: '0 4px', lineHeight: 1 },
-  autoId: { padding: '10px 12px', border: '1px dashed var(--line)', borderRadius: 8, color: 'var(--muted)', fontSize: 14, background: '#fafbfc' },
-};
+function DeviceCard({ d, onDone, onError }) {
+  const offline = d.status !== 'online';
+  const on = !offline && d.power === 'on';
+  const cls = `card${on ? ' on' : ''}`;
+  const body = (
+    <>
+      <span className="pic"><DeviceIcon type={d.type} /></span>
+      <span className="corner" title={offline ? '오프라인' : on ? '켜짐' : ''}>
+        {offline ? <UnlinkIcon /> : on ? <PowerIcon /> : null}
+      </span>
+      <span className="name">{d.name}</span>
+      <span className="meta">
+        {d.location || '-'}<i />
+        {offline ? <span className="offline">오프라인 상태</span> : <span className={on ? 'on' : ''}>{summary(d)}</span>}
+      </span>
+    </>
+  );
+  // 커튼·엘리베이터는 카드 안에 버튼이 있어서 카드 전체를 링크로 만들지 않는다 (상세는 이름을 눌러 이동)
+  if (d.type === 'curtain' || d.type === 'elevator') {
+    return (
+      <div className={cls}>
+        <Link href={`/devices/${d.deviceId}`} style={{ display: 'contents' }}>{body}</Link>
+        {d.type === 'curtain'
+          ? <CurtainActions device={d} onDone={onDone} onError={onError} />
+          : <ElevatorActions device={d} onDone={onDone} onError={onError} />}
+      </div>
+    );
+  }
+  return <Link href={`/devices/${d.deviceId}`} className={cls}>{body}</Link>;
+}
 
+// ---------------- 기기 등록 창 ----------------
 function RegisterDialog({ onClose, onRegistered }) {
   const [type, setType] = useState('');
   const [name, setName] = useState('');
@@ -112,19 +135,24 @@ function RegisterDialog({ onClose, onRegistered }) {
   }
 
   return (
-    <div style={S.overlay} onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
-      <form className="panel" style={S.dialog} onSubmit={submit} noValidate role="dialog" aria-modal="true" aria-labelledby="reg-title">
-        <div style={S.head}>
-          <h2 id="reg-title" style={{ margin: 0, fontSize: 18, color: 'var(--text)' }}>기기 등록</h2>
-          <button type="button" style={S.close} onClick={onClose} disabled={busy} aria-label="닫기">×</button>
+    <div className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <form className="sheet" onSubmit={submit} noValidate role="dialog" aria-modal="true" aria-labelledby="reg-title">
+        <div className="grab" />
+        <div className="head">
+          <h2 id="reg-title">기기 등록</h2>
+          <button type="button" className="close" onClick={onClose} disabled={busy} aria-label="닫기">✕</button>
         </div>
         <p className="hint">새 가전 기기를 내 계정에 연결합니다</p>
 
-        <label htmlFor="reg-type">기기 종류</label>
-        <select id="reg-type" value={type} onChange={(e) => pick(e.target.value)} autoFocus>
-          <option value="" disabled>기기 종류를 선택하세요</option>
-          {TYPES.map((t) => <option key={t.value} value={t.value}>{t.icon} {t.label}</option>)}
-        </select>
+        <label id="reg-type-label">기기 종류</label>
+        <div className={`type-grid${errors.type ? ' invalid' : ''}`} role="radiogroup" aria-labelledby="reg-type-label">
+          {TYPES.map((t, i) => (
+            <button key={t.value} type="button" role="radio" aria-checked={type === t.value}
+              className={type === t.value ? 'selected' : ''} onClick={() => pick(t.value)} autoFocus={i === 0}>
+              <DeviceIcon type={t.value} />{t.label}
+            </button>
+          ))}
+        </div>
         {errors.type && <div className="field-error">{errors.type}</div>}
 
         <label htmlFor="reg-location">설치 위치</label>
@@ -132,19 +160,19 @@ function RegisterDialog({ onClose, onRegistered }) {
         {errors.location && <div className="field-error">{errors.location}</div>}
 
         <label htmlFor="reg-name">기기 이름</label>
-        <input id="reg-name" placeholder="거실 조명" value={name}
+        <input id="reg-name" placeholder="거실 조명" value={name} className={errors.name ? 'invalid' : ''}
           onChange={(e) => { setName(e.target.value); setNameTouched(true); }} />
         {errors.name && <div className="field-error">{errors.name}</div>}
 
         <label>기기 ID</label>
-        <div style={S.autoId}>
+        <div className="auto-id">
           자동 생성 · {selected ? `${type}-${userId ?? '<사용자>'}-01` : '<종류>-<사용자>-<순번>'} 형식
         </div>
 
         {formError && <div className="form-error">{formError}</div>}
-        <div className="stack">
+        <div className="row-btns">
+          <button type="button" className="gray" onClick={onClose} disabled={busy}>취소</button>
           <button className="primary" type="submit" disabled={busy}>{busy ? '등록 중…' : '등록하기'}</button>
-          <button type="button" onClick={onClose} disabled={busy}>취소</button>
         </div>
       </form>
     </div>
@@ -157,6 +185,7 @@ export default function DevicesPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [registering, setRegistering] = useState(false);
+  const [userName, setUserName] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -168,12 +197,19 @@ export default function DevicesPage() {
 
   useEffect(() => {
     if (!tokens.access) { goLogin(); return; }
+    setUserName(currentUser()?.name ?? '');
+    // 상세 화면의 하단 탭 "기기 등록"으로 들어오면 (/devices?register=1) 등록 창을 연다
+    if (new URLSearchParams(window.location.search).get('register') === '1') {
+      setRegistering(true);
+      window.history.replaceState(null, '', '/devices');
+    }
     load();
     const t = setInterval(load, POLL_MS);
     return () => clearInterval(t);
   }, [load]);
 
   const onError = (e) => setError(e.message);
+  const openRegister = useCallback(() => setRegistering(true), []);
   const closeRegister = useCallback(() => setRegistering(false), []);
   const onRegistered = (d) => {
     setRegistering(false);
@@ -181,53 +217,51 @@ export default function DevicesPage() {
     load();
   };
 
+  // 요약 카드 숫자 (목록에서 계산)
+  const total = devices?.length;
+  const online = devices?.filter((d) => d.status === 'online').length;
+  const poweredOn = devices?.filter((d) => d.status === 'online' && d.power === 'on').length;
+  const n = (v) => (v ?? '-');
+
   return (
     <>
-      <TopBar />
       <main className="page">
-        <div className="page-head">
-          <div>
-            <h1>기기 현황</h1>
-            <p className="hint">커튼·엘리베이터는 여기서 바로 제어하고, 나머지는 상세 화면에서 제어해요</p>
-          </div>
-          <button className="primary" onClick={() => setRegistering(true)}>+ 기기 등록</button>
+        <div className="topbar">
+          <span className="home">홈</span>
+          <button type="button" className="plus-btn" onClick={openRegister} aria-label="기기 등록"><PlusIcon /></button>
         </div>
 
-        {error && <div className="error-bar" onClick={() => setError('')}>{error}</div>}
-        {notice && (
-          <div className="error-bar" style={{ background: '#e3f6ea', color: 'var(--ok)' }} onClick={() => setNotice('')}>{notice}</div>
-        )}
+        <section className="summary" aria-label="우리 집 요약">
+          <div className="main"><CloudHomeIcon /><b>{n(poweredOn)}<small>대 켜짐</small></b></div>
+          <div className="stats">
+            <div><b>{n(total)}대</b><span>전체 기기</span></div>
+            <div><b>{n(online)}대</b><span>온라인</span></div>
+            <div><b>{total === undefined ? '-' : total - online}대</b><span>오프라인</span></div>
+          </div>
+        </section>
 
-        {devices === null ? <p className="hint">불러오는 중…</p> : devices.length === 0 ? (
+        <div className="list-head"><b>모든 기기</b><span>{userName ? `${userName}님` : ''}</span></div>
+
+        {error && <div className="error-bar" onClick={() => setError('')}>{error}</div>}
+        {notice && <div className="error-bar ok" onClick={() => setNotice('')}>{notice}</div>}
+
+        {devices === null ? <p className="hint" style={{ margin: '0 4px' }}>불러오는 중…</p> : devices.length === 0 ? (
           <div className="empty">
-            <p>등록된 기기가 없습니다.</p>
-            <button className="primary" onClick={() => setRegistering(true)}>기기 등록하기</button>
+            <div className="logo lg"><LogoIcon /></div>
+            <p className="title">등록된 기기가 없습니다.</p>
+            <p className="hint">오른쪽 위 + 버튼으로 기기를 등록하세요</p>
+            <button className="primary" onClick={openRegister}>기기 등록하기</button>
           </div>
         ) : (
           <div className="grid">
-            {devices.map((d) => {
-              const info = typeInfo(d.type);
-              return (
-                <div className="card" key={d.deviceId}>
-                  <div className="head">
-                    <span className="name">{info.icon} {d.name}</span>
-                    <span className={`pill ${d.status}`}>{d.status === 'online' ? '온라인' : '오프라인'}</span>
-                  </div>
-                  <div className="meta">{info.label}{d.location ? ` · ${d.location}` : ''}</div>
-                  <div className="status">{summary(d)}</div>
-                  {d.type === 'curtain' ? <CurtainActions device={d} onDone={load} onError={onError} />
-                    : d.type === 'elevator' ? <ElevatorActions device={d} onDone={load} onError={onError} />
-                    : (
-                      <div className="actions">
-                        <Link href={`/devices/${d.deviceId}`} style={{ marginLeft: 'auto', fontSize: 14 }}>상세 보기 →</Link>
-                      </div>
-                    )}
-                </div>
-              );
-            })}
+            {devices.map((d) => <DeviceCard key={d.deviceId} d={d} onDone={load} onError={onError} />)}
+            <button type="button" className="card add" onClick={openRegister}>
+              <span className="plus-btn"><PlusIcon /></span>기기 등록
+            </button>
           </div>
         )}
       </main>
+      <TopBar onRegister={openRegister} />
       {registering && <RegisterDialog onClose={closeRegister} onRegistered={onRegistered} />}
     </>
   );
