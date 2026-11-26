@@ -5,7 +5,7 @@
  *  - 위쪽 요약 카드: 켜진 기기 · 전체 · 온라인 · 오프라인 대수 (목록에서 계산)
  *  - 조명·에어컨·난방기기·공기청정기: 카드를 누르면 상세 화면에서 제어 (켜진 기기는 블루 아이콘)
  *  - 커튼: 여기서 바로 열기/닫기, 엘리베이터: 여기서 바로 호출
- *  - 기기 등록: 오른쪽 위 + · 하단 탭 · 등록 카드 → 이 화면 위에 등록 창이 열림 (별도 페이지 없음)
+ *  - 기기 등록: 오른쪽 위 + · 하단 탭 → 이 화면 위에 등록 창이 열림 (별도 페이지 없음)
  *      기기 종류는 아이콘 타일로 선택, 기기 ID 는 서버가 <종류>-<사용자ID>-<순번> 으로 자동 생성 (예: light-5-01)
  */
 import { useCallback, useEffect, useState } from 'react';
@@ -255,9 +255,6 @@ export default function DevicesPage() {
         ) : (
           <div className="grid">
             {devices.map((d) => <DeviceCard key={d.deviceId} d={d} onDone={load} onError={onError} />)}
-            <button type="button" className="card add" onClick={openRegister}>
-              <span className="plus-btn"><PlusIcon /></span>기기 등록
-            </button>
           </div>
         )}
       </main>

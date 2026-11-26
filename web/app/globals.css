@@ -121,8 +121,6 @@ a.card:hover { box-shadow: 0 6px 16px rgba(47, 52, 69, .08); }
 .card .actions { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
 .card .actions button { flex: 1; padding: 6px 8px; font-size: 12px; border-radius: 8px; }
 .card .actions input { width: 60px; flex: none; padding: 6px 8px; font-size: 12px; border-radius: 8px; text-align: center; background: var(--bg); border-color: var(--bg); }
-.card.add { border: 1.5px dashed #d3d5da; background: transparent; align-items: center; justify-content: center; color: var(--muted); font-weight: 700; gap: 8px; cursor: pointer; }
-.card.add .plus-btn { width: 34px; height: 34px; }
 .empty { text-align: center; padding: 48px 16px; }
 .empty .logo { margin: 0 auto; background: #e6e7ea; color: #a7a9b0; }
 .empty p.title { font-weight: 800; margin: 18px 0 6px; }
