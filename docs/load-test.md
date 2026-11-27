@@ -1,122 +1,92 @@
-# 부하 테스트 (k6)
+# 부하 테스트 (k6 · 출시 전 용량 테스트)
 
-[← README](../README.md) · [관측 설계](observability.md) · [지표 가이드](metrics-guide.md) · [롤백 시연](rollback-demo.md)
+[← README](../README.md) · [관측 설계](observability.md) · [런북](runbook.md) · [롤백 시연](rollback-demo.md)
 
-2026-11-27, dev 클러스터에 k6로 부하를 주고 병목을 찾았습니다. 스크립트: [`load/home-iot.js`](../load/home-iot.js)
+2026-11-27, dev 클러스터에서 "예상보다 훨씬 많은 사용자가 각자 기기를 등록해 두고 동시에 쓰면 버티는가"를 k6로 확인했습니다. 스크립트: [`load/capacity.js`](../load/capacity.js)
 
-![이벤트 조회 p95 요약](images/load-01-summary.png)
+![개선 전후 요약](images/load-01-summary.png)
 
 ## 1. 한눈에
 
-- **동시 100명(목표)까지 문제없음**: 실패 0%, 모든 API p95 100ms 이하
-- **300명에서 이벤트 조회만 느려짐** (p95 14.7ms → 112.5ms)
-- CPU가 원인이라 보고 telemetry 파드를 2개로 늘렸지만(#111) **오히려 153.2ms** → 되돌림(#112)
-- DB를 보니 원인은 **모든 가상 사용자가 같은 기기 1대를 조작해서 생긴 행 잠금 대기**. 기기를 30대로 나누면 같은 300명에서 **29.7ms**
-- 실제 서비스는 집마다 기기가 따로라 이 잠금은 거의 생기지 않음. 다만 한 기기에 명령이 몰리면 느려질 수 있다는 한계를 확인함
+- **이미 접속한 사용자는 1,000명(예상의 10배)까지 문제없음**: 단계마다 p95 84ms 이하, 기획서 기준(p95 0.5초) 통과
+- **사용자가 한꺼번에 새로 들어오는 순간이 약점**: 30초에 약 500명이 로그인하면(초당 약 17명) 인증(auth) 서비스가 막혀 로그인 p95 12.4초, 실패 0.44%, auth 파드 재시작
+- **조치**: auth 파드를 2개로 → 로그인 p95 0.17초, 실패 0%, 재시작 없음
+- **남은 개선점**: HPA로 몰릴 때만 자동으로 늘리기(심화 과제), 종료 순서, 살아 있는지 검사 대기 시간
 
-## 2. 시나리오
+## 2. 테스트 설계
 
-사용자가 앱을 쓰는 흐름을 여러 명이 동시에 반복합니다. 한 번 돌 때 3개 API를 부르고 1초 쉽니다.
+| 항목 | 조건 |
+|---|---|
+| 규모 | 예상 동시 접속 100명(가정, 기획서에는 사용자 수 목표 없음) → 10배인 1,000명까지. 100 → 300 → 500 → 1,000명, 단계마다 1분 유지, 단계 사이 30초에 걸쳐 늘림 (총 6분 30초) |
+| 집 · 기기 | 집(계정) 334개 `k6-u001 ~ k6-u334@visionus.test`, 집마다 기기 3대(조명 · 에어컨 · 공기청정기) = 1,002대. 한 집에 1~3명 |
+| 사용자 행동 | 앱을 켜면 로그인 → 반복: 기기 목록(항상) → 이벤트 보기(50%) → 켜기/끄기(20%) → 화면 보며 5~10초 |
+| 통과 기준 | 기획서 NFR: API 응답 p95 0.5초 안, 제어 1초 안 / 팀 기준: 실패 1% 미만 |
+| 안전장치 | 실패율 5% 넘으면 자동 중단 (dev · prod가 DB 서버 t1-db를 같이 씀). prod에는 돌리지 않음 |
+| 부하 보낸 곳 | t1-ci → dev Gateway `10.10.21.100` |
 
-| 순서 | API | 지나가는 서비스 |
-|---|---|---|
-| 1 | `GET /api/v1/devices` 기기 목록 | Gateway(JWT) → device → DB |
-| 2 | `GET /api/v1/devices/{id}/events?limit=20` 이벤트 | Gateway → telemetry → device(소유 확인) → DB |
-| 3 | `POST /api/v1/devices/{id}/commands` 밝기 바꾸기 | Gateway → control → device → MQTT → simulator → MQTT → control · telemetry → DB |
-
-- 사용자 수: 30초 동안 ⅓까지 → 1분 유지 → 30초 동안 최대까지 → 1분 30초 유지 → 30초 동안 0 (총 4분)
-- 통과 기준(thresholds): 실패 1% 미만, 목록 · 이벤트 p95 500ms 미만, 제어 p95 1초 미만 (제어는 기기 응답을 기다리는 API)
-- 전용 계정 `k6@visionus.test` 와 전용 기기 `k6-light-01 ~ N` 을 씁니다. prod 주소를 넣으면 시작 전에 멈춥니다
-- 부하는 t1-ci에서 dev Gateway(`10.10.21.100`)로 보냈습니다
+- 테스트용 계정 · 기기는 시작할 때 만들고(단계별 · API별 숫자에서는 빠지고 전체 요청 수에만 포함), 끝나면 [`load/capacity-cleanup.js`](../load/capacity-cleanup.js)로 기기를 지웁니다
+- 단계별 숫자는 사용자 수를 **유지한 1분**만 잰 것이고, 로그인 · 실패 (전체)는 사용자가 늘어나는 구간까지 포함합니다
 
 ## 3. 결과
 
-모든 실행에서 **실패 0%**. 시간은 p95(요청 100개 중 느린 5번째).
+| | auth 파드 1개 (개선 전) | auth 파드 2개 (개선 후) |
+|---|---|---|
+| 100명 유지 | 초당 21.9건 · p95 48.0ms · 실패 0% | 초당 23.2건 · p95 48.7ms · 실패 0% |
+| 300명 유지 | 초당 67.2건 · p95 63.2ms · 실패 0% | 초당 68.5건 · p95 59.5ms · 실패 0% |
+| 500명 유지 | 초당 112.2건 · p95 64.7ms · 실패 0% | 초당 113.2건 · p95 69.0ms · 실패 0% |
+| 1,000명 유지 | 초당 221.7건 · p95 83.5ms · 실패 0.01% | 초당 224.1건 · p95 68.7ms · 실패 0% |
+| **로그인 p95 (전체)** | **12.4초** | **0.17초** |
+| **실패 (전체)** | **0.44%** | **0%** |
+| auth 재시작 | 테스트마다 1번 (3번 돌려 3번) | 없음 |
+| API p95 (전체) | 목록 3.1ms · 이벤트 298.8ms · 제어 81.3ms | 목록 3.1ms · 이벤트 308.1ms · 제어 81.7ms |
 
-| 실행 | 동시 사용자 | 기기 | telemetry 파드 | 초당 요청 | 전체 | 기기 목록 | **이벤트** | 제어 |
-|---|---|---|---|---|---|---|---|---|
-| before-30 | 30 | 1대 | 1 | 53 | 52.8ms | 3.6ms | **8.1ms** | 82.0ms |
-| before-100 | 100 | 1대 | 1 | 179 | 62.2ms | 5.7ms | **14.7ms** | 84.7ms |
-| before-300 | 300 | 1대 | 1 | 519 | 82.8ms | 12.9ms | **112.5ms** | 84.2ms |
-| after-300 (#111) | 300 | 1대 | 2 | 517 | 94.7ms | 12.8ms | **153.2ms** | 79.0ms |
-| hot-300 (DB 확인용) | 300 | 1대 | 2 | 522 | 81.8ms | 12.2ms | **130.2ms** | 75.9ms |
-| spread-300 | 300 | 30대 | 2 | 531 | 50.8ms | 22.1ms | **29.1ms** | 65.5ms |
-| spread-300b (재현) | 300 | 30대 | 2 | 533 | 50.3ms | 20.5ms | **27.2ms** | 65.6ms |
-| spread-300-1pod (#112 후) | 300 | 30대 | 1 | 533 | 50.2ms | 18.0ms | **29.7ms** | 63.7ms |
+![k6 결과 비교](images/load-03-k6-result.png)
 
-- 제어가 다른 API보다 느린 것은 정상입니다. 명령을 MQTT로 보내고 시뮬레이터의 결과를 기다렸다가 응답합니다
-- 기기 30대일 때 기기 목록이 조금 느려진 것은 목록에 나오는 기기가 1대 → 30대로 늘었기 때문입니다
+## 4. 원인과 조치 (트러블슈팅)
 
-![k6 결과 비교](images/load-04-k6-result.png)
+### 증상
 
-## 4. 병목을 찾은 과정
+auth 파드 1개일 때 사용자가 500명 → 1,000명으로 늘어나는 30초(약 500명이 새로 로그인, 초당 약 17명)에 로그인 p95 12.4초, 일부 요청 실패, auth 파드 재시작. 이미 로그인한 사용자의 요청은 정상.
 
-### ① 가설: telemetry CPU 부족 → 틀림
+### 어디가 바쁜가
 
-300명에서 telemetry CPU가 약 0.63코어(그래프 눈대중)로 가장 높았습니다. Node.js는 파드 하나가 코어 1개 근처에서 막히므로 파드를 2개로 늘렸습니다(#111, dev만).
+Grafana Explore에서 파드별 CPU를 봤습니다 (`kubectl top` 은 metrics-server가 없어 안 됨).
 
-- telemetry는 MQTT를 공유 구독(`$share/telemetry/...`)으로 받아서, 파드를 늘려도 메시지가 두 파드에 나뉘고 이벤트가 두 번 기록되지 않습니다
-- 결과: CPU는 두 파드에 각각 약 0.4코어로 나뉘었지만, 이벤트 조회 p95는 112.5ms → **153.2ms** 로 오히려 나빠졌습니다 → **CPU가 원인이 아님**
+```promql
+sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="home-iot", container!=""}[1m]))
+```
+
+로그인이 몰릴 때 **auth만** 0.7~0.9코어까지 치솟았습니다 (그림은 오후 2시 개선 전 · 후 테스트, 1분 평균). Node.js는 파드 하나가 코어 1개 근처가 한계입니다.
 
 ![파드별 CPU](images/load-02-cpu.png)
 
-### ② 가설: 이벤트 조회 쿼리에 인덱스 없음 → 틀림
-
-테스트마다 이벤트가 수만 건씩 쌓여(테스트 후 k6 기기 이벤트 약 20만 건) 조회가 느려졌을 수 있다고 봤습니다.
+### 왜
 
 ```bash
-# t1-db
-sudo -u postgres psql -d homeiot -c '\d dev.device_events'
-sudo -u postgres psql -d homeiot -c "EXPLAIN ANALYZE SELECT event_id, event_type, payload, occurred_at FROM dev.device_events WHERE device_id='k6-light-01' ORDER BY occurred_at DESC LIMIT 20;"
+# t1-dev-cp
+kubectl -n home-iot get events --field-selector involvedObject.name=<auth 파드> --sort-by=.lastTimestamp
+kubectl -n home-iot logs <auth 파드> --previous --tail=15
 ```
 
-- 인덱스 `idx_device_events_device_time (device_id, occurred_at DESC)` 가 이미 있고, `Index Scan` 으로 **0.1ms** 에 끝났습니다 → **쿼리 자체는 빠름**
+1. 비밀번호 확인에 쓰는 `bcryptjs` 는 순수 자바스크립트라, 확인 계산이 CPU를 독차지해 다른 요청이 오래 줄을 섬 (로그에 4.4초 걸린 로그인이 결국 500으로 끝난 기록)
+2. 살아 있는지 검사(`/healthz`, 기본 대기 1초)에도 대답을 못 해 3번 연속 실패 → `Container auth failed liveness probe, will be restarted`
+3. 꺼지는 과정에서 처리 중인 요청이 끝나기 전에 DB 연결을 닫아, 그 로그인들이 500 → `Cannot use a pool after calling end on the pool`
+4. 새로 뜨는 동안 잠깐 요청을 못 받음 → `Readiness probe failed: connection refused`
 
-### ③ 원인: 같은 기기 1대의 행 잠금 대기 → 맞음
+### 조치
 
-telemetry는 기기 상태를 저장할 때 그 기기 행을 잠급니다 (`SELECT ... FOR UPDATE`, `services/telemetry/src/index.js` 의 `handleState`). 같은 기기의 상태가 동시에 바뀌어 꼬이지 않게 하는 정상 동작입니다.
+dev overlay에서 auth 파드를 2개로 늘렸습니다 (PR 한 줄, prod는 그대로). auth는 상태를 파드에 두지 않아(서명 키는 Secret, refresh 토큰은 DB) 늘려도 안전합니다. 같은 조건으로 다시 재니 로그인 p95 12.4초 → 0.17초, 실패 0.44% → 0%, 재시작 없음.
 
-그런데 테스트에서는 **300명 모두 `k6-light-01` 한 대에 명령**을 보냈습니다.
+### 남은 개선점
 
-1. 상태 저장이 같은 행 하나를 두고 한 줄로 서서 처리됨
-2. 기다리는 동안 DB 연결(파드당 최대 5개, `DB_POOL_MAX`)을 붙잡고 있음
-3. 이벤트 조회도 쓸 연결을 기다린 것으로 봄 → p95 상승 (잠금 대기는 DB에서 확인, 연결 대기는 정황으로 추론)
-4. 파드를 2개로 늘리면 같은 행을 노리는 대기자만 늘어나 더 느려짐 (①의 결과와 맞음)
-
-테스트 중 DB에서 지금 무엇을 기다리는지 봤습니다 (300명 구간에서 몇 초 간격으로 3번):
-
-```bash
-sudo -u postgres psql -d homeiot -c "SELECT wait_event_type, wait_event, state, count(*) FROM pg_stat_activity WHERE datname='homeiot' GROUP BY 1,2,3 ORDER BY 4 DESC;"
-```
-
-| | 기기 1대 | 기기 30대 |
-|---|---|---|
-| `Lock tuple` (같은 행 잠금 대기) | **4 ~ 7개** | **0개** |
-| `Lock transactionid` (앞 트랜잭션 끝나길 대기) | 1 ~ 3개 | 0 ~ 2개 |
-| 일하는(`active`) 연결 | 대부분 잠금 대기 (나머지 약 15개는 `idle`) | 1 ~ 3개, 잠금 대기 거의 없음 (대부분 `idle`) |
-
-![DB 잠금 비교](images/load-03-db-lock.png)
-
-### ④ 확인: 기기를 나누면 정상
-
-스크립트에 `DEVICES` 옵션을 넣어 사용자들을 기기 30대에 나눠 붙였습니다 (실제로 집마다 기기가 따로인 상황). 파드를 1개로 되돌린 뒤(#112) 같은 300명으로 돌리니 이벤트 조회 p95가 **112.5ms → 29.7ms** 였습니다. 파드 2개일 때(27.2 ~ 29.1ms)와 차이가 없어, 파드 수가 아니라 기기 분산이 차이를 만든 것을 확인했습니다.
-
-## 5. 배운 것 · 개선할 점
-
-| 배운 것 | 설명 |
+| 개선점 | 설명 |
 |---|---|
-| 추측하지 말고 측정 | CPU가 가장 높은 서비스가 병목이라고 단정했지만 틀렸음. DB 대기 상태(`pg_stat_activity`)를 보고서야 원인을 찾음 |
-| 파드 늘리기가 답이 아닐 때가 있음 | 같은 자원(행 · 락)을 두고 경쟁하면 파드를 늘릴수록 대기자만 늘어남 |
-| 테스트 데이터도 현실적이어야 함 | 기기 1대에 300명이 몰리는 일은 실제로 거의 없음. 시나리오가 결과를 좌우함 |
-| GitOps로 실험하고 되돌리기 | 파드 수 변경 · 되돌림을 PR(#111 · #112)로 해서 무엇을 언제 바꿨는지 대시보드 배포 표시와 Git에 남음 |
+| HPA (심화 과제) | 지금은 손으로 2개 고정. CPU를 보고 몰릴 때만 늘렸다 줄이게 자동화. metrics-server 설치가 먼저 |
+| 종료 순서 | 꺼질 때 처리 중인 요청이 끝난 뒤 DB 연결을 닫아야 함 (`common/src/service.js`, 모든 서비스 공통) |
+| 살아 있는지 검사 | 대기 1초 · 3번이면 바쁜 파드도 죽은 것으로 봄. `timeoutSeconds` · `failureThreshold` 조정 검토 |
+| 이벤트 조회 | 기준 안(p95 약 0.3초)이지만 다른 API보다 느림. 원인은 아직 확인하지 않음 |
 
-개선할 점 (지금은 하지 않음)
-
-- 한 기기에 명령이 몰리는 경우(예: 여러 가족이 같은 조명을 동시에 조작)를 대비하려면 telemetry의 상태 저장에서 잠금을 잡는 시간을 줄이거나, 이벤트 조회용 DB 연결을 따로 두는 방법이 있음
-- `kubectl top` 은 metrics-server가 없어 안 됨 → CPU는 Grafana Explore에서 `sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="home-iot", container!=""}[1m]))` 로 봄
-- 더 큰 부하(10배 등)와 HPA(자동 파드 늘리기)는 심화 과제
-
-## 6. 다시 해보기
+## 5. 다시 해보기
 
 ```bash
 # t1-ci (k6 설치: 홈 폴더에만, sudo 필요 없음)
@@ -125,12 +95,10 @@ curl -sL https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linu
 cp <저장소>/load/*.js .
 
 read -s K6_PASSWORD; export K6_PASSWORD      # 테스트 계정 비밀번호. Git에 쓰지 않음
-LABEL=before-100 PEAK=100 ./k6-v0.54.0-linux-amd64/k6 run home-iot.js              # 기기 1대
-LABEL=spread-300 PEAK=300 DEVICES=30 ./k6-v0.54.0-linux-amd64/k6 run home-iot.js   # 기기 30대
-DEVICES=30 ./k6-v0.54.0-linux-amd64/k6 run cleanup.js                              # 뒷정리: 테스트 기기 삭제
+LABEL=capacity ACCOUNTS=334 STEPS=100,300,500,1000 ./k6-v0.54.0-linux-amd64/k6 run capacity.js
+ACCOUNTS=334 ./k6-v0.54.0-linux-amd64/k6 run capacity-cleanup.js   # 뒷정리: 테스트 기기 삭제
 unset K6_PASSWORD
 ```
 
-- 결과는 화면 마지막 6줄과 `results/<LABEL>.json` 에 남습니다
-- 돌리기 전에 팀 채널에 알립니다 (dev가 잠깐 느려지거나 dev 경보가 올 수 있음)
-- 테스트 기기를 지우면 그 기기의 이벤트 · 상태도 함께 지워집니다
+- 결과는 화면 마지막 표와 `results/<LABEL>.json` 에 남습니다
+- 돌리는 동안 prod Grafana를 같이 보고, prod가 느려지면 Ctrl+C로 멈춥니다
