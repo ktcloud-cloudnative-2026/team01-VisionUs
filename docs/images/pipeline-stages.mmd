@@ -1,0 +1,27 @@
+flowchart TB
+  subgraph ci["① CI · Jenkins (t1-ci, 서비스별 작업, main을 2분마다 확인)"]
+    direction LR
+    m([사람이 코드 PR 머지<br/>main]) --> c{내 서비스<br/>바뀜?}
+    c -->|예| t[테스트<br/>npm test] --> b[빌드<br/>멀티스테이지] --> s{Trivy<br/>CRITICAL?}
+    s -->|없음| p[GHCR 올리기<br/>sha-커밋 7자리]
+    c -->|아니오| k[건너뜀]
+    s -->|있음| x[중단<br/>테스트 · 빌드 실패도 여기로]
+  end
+  subgraph cd1["② dev 배포 (자동)"]
+    direction LR
+    pr[Jenkins가 dev 배포 PR 생성<br/>newTag를 새 태그로 한 줄 변경] --> am[Jenkins가 자동 머지] --> ad[Argo CD<br/>home-iot-dev] --> dc[[dev 클러스터<br/>롤링 업데이트]]
+  end
+  subgraph cd2["③ prod 배포 (사람이 승인)"]
+    direction LR
+    pp[사람이 prod 배포 PR 생성<br/>dev와 같은 태그로 한 줄 변경] --> ap[사람이 머지 = 승인] --> apr[Argo CD<br/>home-iot-prod] --> pc[[prod 클러스터<br/>롤링 업데이트]]
+  end
+  p --> pr
+  dc -->|dev에서 확인 후| pp
+  am -.성공 알림.-> dis[디스코드 #배포-알림]
+  x -.실패 알림.-> dis
+  pc -.-> gf[Grafana<br/>배포 세로선 · 버전 표]
+  dc -.-> gf
+  classDef stop fill:#fde2e2,stroke:#c0392b,color:#7a1f16
+  classDef ok fill:#e3f1e6,stroke:#1e7d3a,color:#14532d
+  class x stop
+  class dc,pc ok

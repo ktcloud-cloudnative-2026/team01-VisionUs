@@ -7,11 +7,28 @@
 
 ## 흐름
 
+![파이프라인 단계도](images/pipeline-stages.png)
+
 ```
 [처음 한 번]  sample 복사 → 이름 바꾸기 → dev 목록에 등록 → 올리기 → Jenkins 작업 만들기
-[매번]        PR 머지 → (자동) Jenkins: 테스트·빌드·보안 검사·이미지 올리기·배포 PR 생성
-              → 배포 PR 머지 → (자동) Argo CD가 dev에 배포
+[매번]        PR 머지 → (자동) Jenkins: 테스트 · 빌드 · 보안 검사 · 이미지 올리기 · dev 배포 PR 생성 · 자동 머지
+              → (자동) Argo CD가 dev에 배포 → dev에서 확인 → prod는 사람이 PR로 승인
 ```
+
+| 단계 | 하는 일 | 실패하면 |
+|---|---|---|
+| 시작 조건 | 이번 커밋에서 `services/<서비스>/` (화면은 `web/` · `nginx/`)가 바뀌었는지 확인. 안 바뀌었으면 건너뜀 (문서 · 배포 설정 · 배포 PR 커밋도 여기서 걸러짐). Jenkins에서 **지금 빌드**를 누르면 변경이 없어도 빌드 | - |
+| 테스트 | `npm ci && npm test` (node 컨테이너 안에서) | 중단 · 디스코드 실패 알림 |
+| 빌드 | 멀티스테이지 Dockerfile로 이미지 만들기 (연습용 sample만 한 단계, [이미지 크기 비교](image-size.md)) | 중단 · 실패 알림 |
+| 스캔 | Trivy로 CRITICAL 취약점 검사 (고칠 수 있는 것만) | 중단 · 실패 알림 |
+| 올리기 | GHCR에 `sha-<커밋 7자리>` · `latest` 태그로 올림 | 중단 · 실패 알림 |
+| 배포 PR | `deploy/overlays/dev` 의 `newTag` 한 줄을 바꾼 `deploy(dev): <서비스> <태그>` PR을 만들고 **자동 머지** | 자동 머지가 안 되면 PR 링크를 디스코드로 → 직접 머지 |
+| dev 반영 | Argo CD(`home-iot-dev`)가 약 3분마다 Git을 보고 파드를 새 이미지로 교체 (롤링 업데이트) | [런북](runbook.md) |
+| prod 반영 | 사람이 같은 태그로 `deploy(prod)` PR → **머지 = 승인** → Argo CD(`home-iot-prod`). 디스코드 배포 알림은 없음 (Jenkins를 거치지 않음) → Argo CD 화면이나 prod Grafana 배포 세로선 · 버전 표로 확인 | [태그 규칙 3절](deploy-tags.md#3-prod-승인-배포) |
+
+- 개선점: prod 배포도 디스코드로 알리려면 Argo CD Notifications 설정이 필요합니다 (지금은 없음)
+
+그림 원본: [`images/pipeline-stages.mmd`](images/pipeline-stages.mmd) (Mermaid). 고치면 `mmdc -i pipeline-stages.mmd -o pipeline-stages.png -b white -s 2 -w 1100` 로 다시 만듭니다.
 
 클러스터에 직접 접속할 필요는 없습니다.
 
@@ -134,10 +151,9 @@ Jenkins 화면 여는 법은 아래 [참고](#jenkins-화면-보기)에 있습�
 ## 매번: dev에 올리기
 
 1. 로컬에서 `npm test` 통과 확인 → PR → Squash and merge
-2. 2분 안에 Jenkins가 알아서 빌드합니다 (테스트 → 빌드 → 보안 검사 → 이미지 올리기 → 배포 PR)
-3. **Pull requests** 에 `deploy(dev): <서비스> sha-xxxxxxx` PR이 자동으로 생깁니다
-4. 바뀐 게 내 서비스 `newTag` 인지 보고 → Squash and merge
-5. 몇 분 뒤 dev에 반영됩니다
+2. 2분 안에 Jenkins가 알아서 빌드합니다 (테스트 → 빌드 → 보안 검사 → 이미지 올리기 → 배포 PR → 자동 머지)
+3. 디스코드 `#배포-알림` 에 결과가 옵니다. ✅ 성공이면 `deploy(dev): <서비스> sha-xxxxxxx` PR이 **자동으로 머지**된 것이고, 자동 머지가 안 됐다는 알림이면 링크된 PR을 직접 머지합니다
+4. 몇 분 뒤 dev에 반영됩니다 (Argo CD가 약 3분마다 확인)
 
 ## 잘못 올라갔으면
 
