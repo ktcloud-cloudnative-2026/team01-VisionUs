@@ -48,14 +48,3 @@ configMapGenerator:
   - SIM_FLOOR_MOVE_MS="1500"
   name: home-iot-config
   namespace: home-iot
-
-# 용량 테스트: 동시 1,000명(30초에 500명 로그인)에서 auth CPU 약 0.9코어, 로그인 p95 12초
-# → bcryptjs 비밀번호 확인이 파드 하나를 붙잡음 → 파드 2개로 나눠 처리 (dev만)
-patches:
-- target:
-    kind: Deployment
-    name: auth
-  patch: |-
-    - op: replace
-      path: /spec/replicas
-      value: 2
