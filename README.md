@@ -15,6 +15,7 @@
 | | [기술 스택](docs/tech-stack.md) | 무엇을 왜 어디에 |
 | | [API 명세](docs/api-spec.md) | 서비스별 OpenAPI |
 | | [ERD](docs/erd/) | 서비스별 DB |
+| | [DB 구조 · 샘플 데이터](docs/db-seed.md) | `db/schema.sql` · `db/seed.sql` 실행 방법 |
 | | [관측 설계](docs/observability.md) | 지표 · 로그 · 알림 |
 | 협업 | [역할](docs/roles.md) | 서비스 담당 · 공통 영역 담당 |
 | | [공통 규칙](docs/conventions.md) | Git 전략 · 코드 규칙 · 비밀값 |
