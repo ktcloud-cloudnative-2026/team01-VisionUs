@@ -22,6 +22,7 @@
 | | [GitHub 사용 가이드](docs/github-guide.md) | clone · 브랜치 · PR · 리뷰 |
 | 운영 | [런북](docs/runbook.md) | 장애별 확인 명령 · 조치 |
 | | [모니터링 설치 가이드](docs/monitoring-guide.md) | Prometheus · Loki · Grafana 설치 · 확인 |
+| | [부하 테스트](docs/load-test.md) | k6 결과 · 병목 찾기 (동시 30 · 100 · 300명) |
 | | [결정 기록](docs/adr/) | 무엇을 왜 골랐나 |
 
 ## 외부 도구로 작성하기
