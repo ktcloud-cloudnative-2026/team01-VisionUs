@@ -48,3 +48,14 @@ configMapGenerator:
   - SIM_FLOOR_MOVE_MS="1500"
   name: home-iot-config
   namespace: home-iot
+
+# 부하 테스트 개선: telemetry가 동시 300명에서 CPU 0.6코어로 가장 바쁨 → 파드 2개
+# (MQTT는 공유 구독 $share 라 메시지가 두 파드에 나뉘어 들어가고 중복 기록 없음)
+patches:
+- target:
+    kind: Deployment
+    name: telemetry
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 2
