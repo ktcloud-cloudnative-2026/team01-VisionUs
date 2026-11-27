@@ -24,7 +24,7 @@ images:
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/telemetry
   newTag: sha-907bedb
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web
-  newTag: sha-9c09a99
+  newTag: sha-f1807d0
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web-nginx
   newTag: sha-9c09a99
 # prod 환경 설정값 (dev와 DB_SCHEMA만 다름)
