@@ -23,7 +23,7 @@ images:
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/sample
   newTag: sha-ae4a119
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/simulator
-  newTag: sha-439e416
+  newTag: sha-69dc595
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/telemetry
   newTag: sha-907bedb
 - name: ghcr.io/ktcloud-cloudnative-2026/team01-visionus/web
@@ -52,10 +52,10 @@ configMapGenerator:
 # 용량 테스트: 동시 1,000명(30초에 500명 로그인)에서 auth CPU 약 0.9코어, 로그인 p95 12초
 # → bcryptjs 비밀번호 확인이 파드 하나를 붙잡음 → 파드 2개로 나눠 처리 (dev만)
 patches:
-- target:
-    kind: Deployment
-    name: auth
-  patch: |-
+- patch: |-
     - op: replace
       path: /spec/replicas
       value: 2
+  target:
+    kind: Deployment
+    name: auth
